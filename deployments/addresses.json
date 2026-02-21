@@ -1,11 +1,24 @@
 {
+  "8453": {
+    "chainId": 8453,
+    "chainName": "Base Mainnet",
+    "explorer": "https://base.blockscout.com",
+    "timestamp": "2026-02-21T02:46:37.158Z",
+    "contracts": {
+      "IdentityNFTFactory": "0xa5806b4f9faac539803bc03e09294ccf4688c663",
+      "VaultFactory": "0xbadcc579d748e7eb1a3317500a36beb9e7cbef68",
+      "CourseFactory": "0xd7df1f996adf0d119f9a286036c05a40d783599f"
+    }
+  },
   "84532": {
     "chainId": 84532,
     "chainName": "Base Sepolia",
     "explorer": "https://base-sepolia.blockscout.com",
-    "timestamp": "2026-02-20T22:36:15.394Z",
+    "timestamp": "2026-02-21T02:43:36.807Z",
     "contracts": {
-      "CourseFactory": "0xeb17fe8d57a6c546f67a9ac5661128ba12857f4f"
+      "CourseFactory": "0x1246c42b7914ff65849d7752c5cdf4aaa91767ed",
+      "IdentityNFTFactory": "0x16dd1c94afc8045ed1785811c33e3a17a94c978d",
+      "VaultFactory": "0x60f9a2250012ed48ed1688b4123bf8e647fba472"
     }
   }
 }
