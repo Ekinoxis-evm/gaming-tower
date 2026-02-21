@@ -3,32 +3,17 @@
     "type": "constructor",
     "inputs": [
       {
-        "name": "name",
+        "name": "_name",
         "type": "string",
         "internalType": "string"
       },
       {
-        "name": "symbol",
+        "name": "_symbol",
         "type": "string",
         "internalType": "string"
       },
       {
-        "name": "_mintPrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_maxSupply",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_baseTokenURI",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "_privateContentURI",
+        "name": "_city",
         "type": "string",
         "internalType": "string"
       },
@@ -38,12 +23,65 @@
         "internalType": "address"
       },
       {
-        "name": "royaltyFeeBps",
-        "type": "uint96",
-        "internalType": "uint96"
+        "name": "_soulbound",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "_initialTokens",
+        "type": "tuple[]",
+        "internalType": "struct IdentityNFT.InitialTokenConfig[]",
+        "components": [
+          {
+            "name": "token",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "mintPrice",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "monthlyPrice",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "yearlyPrice",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "MONTHLY_PERIOD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "YEARLY_PERIOD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -84,7 +122,7 @@
   },
   {
     "type": "function",
-    "name": "baseTokenURI",
+    "name": "city",
     "inputs": [],
     "outputs": [
       {
@@ -97,13 +135,83 @@
   },
   {
     "type": "function",
-    "name": "canMint",
+    "name": "createdAt",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "disableToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "expiryOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "expiryOfUser",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAcceptedTokens",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "bool",
-        "internalType": "bool"
+        "type": "address[]",
+        "internalType": "address[]"
       }
     ],
     "stateMutability": "view"
@@ -123,25 +231,6 @@
         "name": "",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getCourseContent",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "string",
-        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -172,49 +261,10 @@
   },
   {
     "type": "function",
-    "name": "maxSupply",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "mint",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "mintPrice",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "mintTo",
+    "name": "isValid",
     "inputs": [
       {
-        "name": "recipient",
+        "name": "user",
         "type": "address",
         "internalType": "address"
       }
@@ -222,11 +272,40 @@
     "outputs": [
       {
         "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mint",
+    "inputs": [
+      {
+        "name": "metadataURI",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "period",
+        "type": "uint8",
+        "internalType": "enum IdentityNFT.Period"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "tokenId",
         "type": "uint256",
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -295,27 +374,7 @@
   },
   {
     "type": "function",
-    "name": "privateContentURI",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "renounceOwnership",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "royaltyInfo",
+    "name": "renew",
     "inputs": [
       {
         "name": "tokenId",
@@ -323,24 +382,25 @@
         "internalType": "uint256"
       },
       {
-        "name": "salePrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "receiver",
-        "type": "address",
-        "internalType": "address"
+        "name": "period",
+        "type": "uint8",
+        "internalType": "enum IdentityNFT.Period"
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "view"
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -413,56 +473,27 @@
   },
   {
     "type": "function",
-    "name": "setBaseURI",
+    "name": "setTokenConfig",
     "inputs": [
       {
-        "name": "newURI",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setMintPrice",
-    "inputs": [
-      {
-        "name": "newPrice",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setPrivateContentURI",
-    "inputs": [
-      {
-        "name": "newURI",
-        "type": "string",
-        "internalType": "string"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setRoyalty",
-    "inputs": [
-      {
-        "name": "receiver",
+        "name": "token",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "feeBps",
-        "type": "uint96",
-        "internalType": "uint96"
+        "name": "mintPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "monthlyPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "yearlyPrice",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -480,6 +511,38 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "soulbound",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "statusOf",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum IdentityNFT.Status"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -502,6 +565,38 @@
   },
   {
     "type": "function",
+    "name": "suspend",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "suspended",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "symbol",
     "inputs": [],
     "outputs": [
@@ -509,6 +604,59 @@
         "name": "",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tokenConfigs",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "mintPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "monthlyPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "yearlyPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "enabled",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tokenIdOf",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -603,8 +751,32 @@
   },
   {
     "type": "function",
-    "name": "withdraw",
-    "inputs": [],
+    "name": "unsuspend",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateMetadata",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "newURI",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -660,33 +832,7 @@
   },
   {
     "type": "event",
-    "name": "BaseURIUpdated",
-    "inputs": [
-      {
-        "name": "newURI",
-        "type": "string",
-        "indexed": false,
-        "internalType": "string"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "MintPriceUpdated",
-    "inputs": [
-      {
-        "name": "newPrice",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "Minted",
+    "name": "IdentityMinted",
     "inputs": [
       {
         "name": "to",
@@ -699,31 +845,62 @@
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
+      },
+      {
+        "name": "period",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum IdentityNFT.Period"
+      },
+      {
+        "name": "expiry",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
   },
   {
     "type": "event",
-    "name": "MintedTo",
+    "name": "IdentityRenewed",
     "inputs": [
-      {
-        "name": "payer",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "recipient",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
       {
         "name": "tokenId",
         "type": "uint256",
         "indexed": true,
         "internalType": "uint256"
+      },
+      {
+        "name": "period",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum IdentityNFT.Period"
+      },
+      {
+        "name": "newExpiry",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MetadataUpdated",
+    "inputs": [
+      {
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "uri",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
       }
     ],
     "anonymous": false
@@ -762,13 +939,57 @@
   },
   {
     "type": "event",
-    "name": "PrivateContentUpdated",
+    "name": "Suspended",
     "inputs": [
       {
-        "name": "newURI",
-        "type": "string",
+        "name": "tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TokenConfigSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "mintPrice",
+        "type": "uint256",
         "indexed": false,
-        "internalType": "string"
+        "internalType": "uint256"
+      },
+      {
+        "name": "monthlyPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "yearlyPrice",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TokenDisabled",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -825,68 +1046,22 @@
     "anonymous": false
   },
   {
-    "type": "error",
-    "name": "ERC2981InvalidDefaultRoyalty",
-    "inputs": [
-      {
-        "name": "numerator",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "denominator",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "ERC2981InvalidDefaultRoyaltyReceiver",
-    "inputs": [
-      {
-        "name": "receiver",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
-  },
-  {
-    "type": "error",
-    "name": "ERC2981InvalidTokenRoyalty",
+    "type": "event",
+    "name": "Unsuspended",
     "inputs": [
       {
         "name": "tokenId",
         "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "numerator",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "denominator",
-        "type": "uint256",
+        "indexed": true,
         "internalType": "uint256"
       }
-    ]
+    ],
+    "anonymous": false
   },
   {
     "type": "error",
-    "name": "ERC2981InvalidTokenRoyaltyReceiver",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "receiver",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
+    "name": "AlreadyHasIdentity",
+    "inputs": []
   },
   {
     "type": "error",
@@ -1003,17 +1178,12 @@
   },
   {
     "type": "error",
-    "name": "IncorrectPayment",
+    "name": "NoIdentityFound",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "MaxSupplyReached",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "NotTokenHolder",
+    "name": "NotTokenOwner",
     "inputs": []
   },
   {
@@ -1045,8 +1215,30 @@
   },
   {
     "type": "error",
-    "name": "WithdrawalFailed",
+    "name": "SafeERC20FailedOperation",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SoulboundToken",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TokenNotAccepted",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",

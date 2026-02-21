@@ -1,46 +1,75 @@
-# 🎓 Courses NFT Platform
+# Gaming Tower + Courses NFT
 
-> A decentralized education platform where each course is an ERC-721 NFT. Token holders gain exclusive access to private course content, creating a Web3-native learning ecosystem.
+> A decentralized gaming and education platform on Base.
+> Players stake tokens to compete in number-submission challenges and maintain renewable identity profiles. Course creators monetize content through ETH-priced ERC-721 NFTs.
 
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.27-363636?logo=solidity)](https://soliditylang.org/)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-000000)](https://getfoundry.sh/)
-[![Base Sepolia](https://img.shields.io/badge/Deployed%20on-Base%20Sepolia-0052FF)](https://docs.base.org/)
+[![Base](https://img.shields.io/badge/Deployed%20on-Base%20Sepolia%20%7C%20Mainnet-0052FF)](https://docs.base.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🎯 Overview
+---
 
-Courses NFT is a permissionless platform enabling anyone to create and monetize educational content through NFTs. Each course deploys as a standalone ERC-721 contract, with students minting tokens to gain lifetime access to private course materials.
-
-### Core Architecture
+## Architecture
 
 ```
-CourseFactory (Singleton)
-    ├─> CourseNFT #1 (Python 101) 
-    ├─> CourseNFT #2 (Solidity Advanced)
-    └─> CourseNFT #3 (Web3 Basics)
+Gaming Tower
+├── IdentityNFTFactory ──deploys──► IdentityNFT  (city collection, subscription card, multi-token)
+├── VaultFactory       ──deploys──► ChallengeVault (EIP-4626, token escrow, 2-player number game)
+
+Courses Platform
+└── CourseFactory      ──deploys──► CourseNFT    (ERC-721, ETH payment, ERC-2981 royalties)
 ```
 
-**CourseFactory** - Deploys and tracks all courses  
-**CourseNFT** - Individual ERC-721 per course with gated content access
+### Key rules
 
-### Key Features
+- Gaming actions (challenge staking, identity mint/renewal) are paid in **whitelisted ERC-20 tokens** (1UP, USDC, EUROC — configured per deployment).
+- ETH is used only by **CourseNFT**.
+- A valid (active, non-suspended) **IdentityNFT** is the only requirement to create or join a challenge.
+- Each **IdentityNFT** collection is city-specific (e.g. "Medellín", "Bogotá") and is deployed on-chain via `IdentityNFTFactory.deployCollection()`.
+- 1 1UP = 1 000 COP (platform display convention).
 
-✅ **Token-Gated Access** - Only NFT holders can view course content  
-✅ **Instant Deployment** - Launch a course in one transaction  
-✅ **Dynamic Pricing** - Update mint prices anytime  
-✅ **Flexible Supply** - Set limits or allow unlimited enrollment  
-✅ **Automated Payments** - Direct treasury routing on every mint  
-✅ **Transferable Access** - Course access moves with NFT ownership  
-✅ **Emergency Controls** - Pause/unpause minting as needed  
+---
 
-## 🚀 Quick Start
+## Contracts
+
+| Contract | Description | Payment |
+|----------|-------------|---------|
+| `IdentityNFTFactory` | Admin-only factory — deploys city IdentityNFT collections on-chain | — |
+| `IdentityNFT` | Subscription profile card — city-based, monthly/yearly renewal, multi-token, admin suspend | ERC-20 token (per-token config) |
+| `ChallengeVault` | EIP-4626 escrow for two-player number-submission challenges | ERC-20 token (whitelisted) |
+| `VaultFactory` | Deploys & tracks ChallengeVaults; gates creation on IdentityNFT | — |
+| `CourseNFT` | ERC-721 course NFT with token-gated content + ERC-2981 royalties | ETH |
+| `CourseFactory` | Deploys & tracks CourseNFT contracts | — |
+
+---
+
+## Token Addresses
+
+| Token | Network | Address |
+|-------|---------|---------|
+| 1UP | Base Sepolia | `0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f` |
+| 1UP | Base Mainnet | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| USDC | Base Mainnet | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| EUROC | Base Mainnet | `0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42` |
+
+---
+
+## Deployed Addresses
+
+Contract addresses per network live in [`deployments/addresses.json`](deployments/addresses.json). This file is updated automatically after each deploy step.
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- Private key with testnet ETH ([Base Sepolia Faucet](https://www.coinbase.com/faucets/base-ethereum-goerli-faucet))
+- Wallet with Base Sepolia ETH (testnet) or ETH + payment tokens (mainnet)
+- Node.js ≥ 18 (for the extraction scripts)
 
-### 1️⃣ Install Dependencies
+### 1. Install
 
 ```bash
 git clone https://github.com/yourusername/courses_nft.git
@@ -48,250 +77,349 @@ cd courses_nft
 forge install
 ```
 
-### 2️⃣ Configure Environment
+### 2. Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials:
+Fill `.env` — key variables:
+
 ```env
-PRIVATE_KEY=your_private_key_here
-TREASURY_ADDRESS=your_treasury_address
+PRIVATE_KEY=0x...
+BASESCAN_API_KEY=your_key
+
+# Network RPC
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
-BASESCAN_API_KEY=your_api_key  # For contract verification
+BASE_RPC_URL=https://mainnet.base.org
+
+# Shared
+DEFAULT_TREASURY=0xYourTreasury
+RESOLVER_ADDRESS=0xYourResolver
+
+# Payment tokens for VaultFactory staking (ACCEPTED_TOKEN_1 required)
+ACCEPTED_TOKEN_1=0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f
+
+# Filled in after each deploy step:
+# IDENTITY_NFT_FACTORY=0x...
+# IDENTITY_NFT=0x...          (address of first city collection)
+# VAULT_FACTORY_ADDRESS=0x...
+# FACTORY_ADDRESS=0x...
 ```
 
-### 3️⃣ Run Tests
+### 3. Test
 
 ```bash
-forge test                 # Run all tests
-forge test -vvv           # Verbose mode with traces
-forge coverage            # Generate coverage report
+forge test -vvv
+forge coverage
+forge test --gas-report
 ```
-
-### 4️⃣ Deploy Factory
-
-```bash
-# Deploy to Base Sepolia and auto-verify
-./script/deploy-and-verify.sh base-sepolia
-
-# Extract deployment addresses
-node script/extractDeployment.js all
-```
-📚 Usage
-
-### For Course Creators
-
-```solidity
-// 1. Create course through factory
-factory.createCourse(
-    "Python Programming",
-    "PY101",
-    0.1 ether,
-    100,        // max supply
-    "ipfs://QmPublic/",
-    "ipfs://QmPrivate/",
-    treasuryAddress
-);
-
-// 2. Manage your course
-courseNFT.setMintPrice(0.15 ether);      // Update price
-## 📋 Contract API
-
-### CourseFactory
-
-| Function | Access | Description |
-|----------|--------|-------------|
-| `createCourse(...)` | Public | Deploy new course with config |
-| `getAllCourses()` | View | Get all course addresses |
-| `getCoursesByCreator(address)` | View | Filter courses by creator |
-| `getCourseCount()` | View | Total courses deployed |
-| `setDefaultTreasury(address)` | Owner | Update default treasury |
-
-### CourseNFT
-
-**Public Functions**
-
-| Function | Payment | Description |
-|----------|---------|-------------|
-| `mint()` | `mintPrice` | Mint course NFT to gain access |
-| `getCourseContent(uint256)` | Free | Access private content (holders only) |
-| `mintPrice()` | View | Current mint price |
-| `totalSupply()` | View | Tokens minted |
-| `maxSupply()` | View | Max supply (0 = unlimited) |
-| `canMint()` | View | Check if minting is available |
-
-**Admin Functions** (onlyOwner)
-
-| Function | Description |
-|----------|-------------|
-| `setMintPrice(uint256)` | Update mint price |
-| `setPrivateContentURI(string)` | Update course content |
-| `setBaseURI(string)` | Update public metadata |
-| `setTreasury(address)` | Change payment destination |
-| `pause() / unpause()` | Emergency controls |
-| `withdraw()` | Transfer balance to treasury |
 
 ---
 
-## 🏗️ Project Structure
+## Deploy & Verify
+
+### Deploy order
+
+```
+IdentityNFTFactory  →  (deployCollection via frontend/cast)  →  VaultFactory  →  CourseFactory
+```
+
+Infrastructure contracts are deployed once per network using `deploy.sh`. City IdentityNFT collections are deployed on-chain by the admin calling `IdentityNFTFactory.deployCollection()` — no CLI script needed per city.
+
+---
+
+### Step 0 — Build & extract ABIs
+
+```bash
+source .env      # load vars into shell (required for CLI flags)
+forge build
+node script/extract-abis.js
+```
+
+> `source .env` must be run in every new terminal session. Foundry loads `.env` automatically for `vm.env*()` inside scripts, but **not** for CLI flags (`--rpc-url`, `--private-key`, `--etherscan-api-key`).
+
+---
+
+### Step 1 — Deploy IdentityNFTFactory
+
+Deployed once. After this, city collections are created from the frontend or via `cast`.
+
+```bash
+./script/deploy.sh base-sepolia --step identity-factory
+# or for mainnet:
+./script/deploy.sh base --step identity-factory
+```
+
+Set the printed address in `.env`:
+
+```env
+IDENTITY_NFT_FACTORY=0x<printed address>
+```
+
+---
+
+### Step 1b — Deploy first city collection
+
+Call `IdentityNFTFactory.deployCollection()` from the admin frontend panel, or via `cast`:
+
+```bash
+cast send $IDENTITY_NFT_FACTORY \
+  "deployCollection(string,string,string,address,bool,(address,uint256,uint256,uint256)[])" \
+  "Entry - Medellín" "EMDE" "Medellín" $DEFAULT_TREASURY false \
+  "[(0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f,50000000000000000000,20000000000000000000,200000000000000000000)]" \
+  --private-key $PRIVATE_KEY --rpc-url $BASE_SEPOLIA_RPC_URL
+```
+
+Set the deployed collection address in `.env`:
+
+```env
+IDENTITY_NFT=0x<collection address>
+```
+
+---
+
+### Step 2 — Deploy VaultFactory
+
+Requires `IDENTITY_NFT` and `ACCEPTED_TOKEN_1` in `.env`.
+
+```bash
+./script/deploy.sh base-sepolia --step vault-factory
+```
+
+Set the printed address in `.env`:
+
+```env
+VAULT_FACTORY_ADDRESS=0x<printed address>
+```
+
+---
+
+### Step 3 — Deploy CourseFactory
+
+```bash
+./script/deploy.sh base-sepolia --step course-factory
+```
+
+Set the printed address in `.env`:
+
+```env
+FACTORY_ADDRESS=0x<printed address>
+```
+
+---
+
+### Verifier options
+
+The `deploy.sh` script uses Basescan (etherscan) by default. To use a different verifier, pass the forge flags directly:
+
+#### Blockscout
+
+```bash
+forge script script/DeployIdentityNFTFactory.s.sol:DeployIdentityNFTFactory \
+  --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY \
+  --broadcast --verify --verifier blockscout \
+  --verifier-url https://base-sepolia.blockscout.com/api/
+```
+
+#### Sourcify
+
+```bash
+--verify --verifier sourcify
+```
+
+| Network | Basescan | Blockscout |
+|---------|----------|------------|
+| Base Sepolia | https://sepolia.basescan.org | https://base-sepolia.blockscout.com |
+| Base Mainnet | https://basescan.org | https://base.blockscout.com |
+
+---
+
+## Deployment Artifacts
+
+```
+deployments/
+├── addresses.json          # contract addresses per chain (auto-generated)
+└── abi/
+    ├── IdentityNFTFactory.json
+    ├── IdentityNFT.json
+    ├── VaultFactory.json
+    ├── ChallengeVault.json
+    ├── CourseFactory.json
+    └── CourseNFT.json
+```
+
+### Extraction scripts
+
+| Script | When to run | What it does |
+|--------|-------------|--------------|
+| `node script/extract-abis.js` | After `forge build` | Copies ABI arrays from `out/` → `deployments/abi/` |
+| `node script/extract-addresses.js [chainId]` | After each deploy step | Reads `broadcast/` run files → merges into `deployments/addresses.json` |
+
+The `deploy.sh` script runs `extract-addresses.js` automatically after each step.
+
+### Frontend usage (viem / wagmi)
+
+```typescript
+import addresses            from '@/deployments/addresses.json';
+import IdentityNFTFactoryAbi from '@/deployments/abi/IdentityNFTFactory.json';
+import CourseFactoryAbi      from '@/deployments/abi/CourseFactory.json';
+
+const chainId = '84532';
+const { contracts } = addresses[chainId];
+
+const { data } = useReadContract({
+  address: contracts.CourseFactory,
+  abi: CourseFactoryAbi,
+  functionName: 'getCourseCount',
+});
+```
+
+---
+
+## Usage
+
+### Identity flow
+
+```
+Admin (once per city):
+  IdentityNFTFactory.deployCollection(name, symbol, city, treasury, soulbound, tokens)
+  → new IdentityNFT collection, owned by factory admin
+
+User:
+  1. Approve ERC-20 token to IdentityNFT contract
+  2. IdentityNFT.mint(metadataURI, period, token)
+     → one card per address, subscription window starts (30 or 365 days)
+  3. IdentityNFT.renew(tokenId, period, token) before expiry
+     → active: extends from current expiry (paid days preserved)
+     → expired: restarts from block.timestamp
+```
+
+### Challenge flow
+
+```
+1. Creator (with valid IdentityNFT) calls:
+   VaultFactory.createChallenge(token, stake, duration, metadataURI)
+   → ChallengeVault deployed, creator becomes player1
+
+2. Creator approves token → vault address
+   Creator calls vault.deposit(stake, self)           [state: OPEN]
+
+3. Challenger (with valid IdentityNFT) approves token → vault address
+   Challenger calls vault.deposit(stake, self)
+   → vault activates, endTime set                    [state: ACTIVE]
+
+4. After endTime: each player calls vault.submitNumber(number)
+   → highest number wins automatically               [state: RESOLVED]
+
+5. If both submit the same number (tie):
+   resolver calls vault.resolveDispute(winnerAddress) [state: RESOLVED]
+```
+
+### Course flow
+
+```
+1. Creator calls CourseFactory.createCourse(
+     name, symbol, mintPrice, maxSupply,
+     baseURI, privateContentURI, treasury, royaltyBps
+   ) → CourseNFT deployed, ownership transferred to creator
+
+2. Student calls CourseNFT.mint{value: mintPrice}()
+
+3. Student calls CourseNFT.getCourseContent(tokenId) → private IPFS URI
+```
+
+### Create a course via script
+
+```bash
+forge script script/MintCourse.s.sol:CreateCourse \
+  --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY --broadcast
+```
+
+---
+
+## Project Structure
 
 ```
 src/
-├── CourseFactory.sol         # Factory contract for deploying courses
-└── CourseNFT.sol            # Individual ERC-721 course contract
+├── IdentityNFTFactory.sol       # Admin factory — deploys city IdentityNFT collections
+├── IdentityNFT.sol              # Subscription profile card (multi-token, city-based)
+├── challenges/
+│   ├── ChallengeVault.sol       # EIP-4626 2-player number game escrow
+│   ├── VaultFactory.sol         # Deploys ChallengeVaults (identity-gated, token whitelist)
+│   └── IIdentityNFT.sol         # Interface used by VaultFactory and ChallengeVault
+└── courses/
+    ├── CourseNFT.sol            # ERC-721 course + content gate (ETH, ERC-2981)
+    └── CourseFactory.sol        # Deploys CourseNFTs
 
 test/
-└── CourseNFT.t.sol          # Comprehensive Foundry tests
+├── ChallengeVault.t.sol
+├── IdentityNFT.t.sol
+├── CourseNFT.t.sol
+└── mocks/
+    ├── MockERC20.sol
+    └── MockIdentityNFT.sol
 
 script/
-├── Counter.s.sol            # Factory deployment script
-├── MintCourse.s.sol         # Course creation script
-├── deploy-and-verify.sh     # Deploy + verify automation
-├── create-course.sh         # Course creation automation
-└── extractDeployment.js     # Extract deployment addresses
+├── deploy.sh                        # One-command deploy helper (recommended)
+├── DeployIdentityNFTFactory.s.sol   # Step 1: deploy IdentityNFTFactory
+├── DeployVaultFactory.s.sol         # Step 2: deploy VaultFactory
+├── DeployFactory.s.sol              # Step 3: deploy CourseFactory
+├── MintCourse.s.sol                 # Create a course via script
+├── extract-abis.js                  # Copies ABIs from out/ → deployments/abi/
+└── extract-addresses.js             # Reads broadcast/ → deployments/addresses.json
 
 deployments/
-├── addresses.json           # Deployed contract addresses
-└── abi/                     # Contract ABIs for frontend
-    ├── CourseFactory.json
-    └── CourseNFT.json
+├── addresses.json               # Deployed addresses per chain (auto-generated)
+└── abi/                         # Clean ABI files for frontend (auto-generated)
 
-docs/
-├── Architecture-Plan.md           # Detailed architecture
-├── Implementation-Summary.md      # Implementation guide
-├── Frontend-Integration-Guide.md  # Frontend developer guide
-└── Courses.md                     # Contract documentation
+docs_contracts/
+├── Technical-Reference.md
+└── Frontend-Integration-Guide.md
 ```
 
 ---
 
-## 🛠️ Development
+## Networks
 
-### Build & Compile
-
-```bash
-forge build
-forge build --sizes       # Check contract sizes
-```
-
-### Testing
-
-```bash
-forge test                      # Run all tests
-forge test -vvv                 # Verbose with stack traces
-forge test --match-test testMint    # Run specific test
-forge test --gas-report         # Gas usage report
-forge coverage                  # Coverage analysis
-```
-
-### Code Quality
-
-```bash
-forge fmt                # Format code
-forge fmt --check        # Check formatting (CI)
-slither .                # Static analysis (requires Slither)
-```
-
-### Deployment
-
-```bash
-# Deploy factory with auto-verification
-./script/deploy-and-verify.sh base-sepolia
-
-# Or manually with Foundry
-forge script script/Counter.s.sol:DeployFactory \
-  --rpc-url $BASE_SEPOLIA_RPC_URL \
-  --private-key $PRIVATE_KEY \
-  --broadcast \
-  --verify
-```
+| Network | Chain ID | RPC | Explorer (Basescan) | Explorer (Blockscout) |
+|---------|----------|-----|---------------------|-----------------------|
+| Base Sepolia | 84532 | https://sepolia.base.org | [sepolia.basescan.org](https://sepolia.basescan.org) | [base-sepolia.blockscout.com](https://base-sepolia.blockscout.com) |
+| Base Mainnet | 8453 | https://mainnet.base.org | [basescan.org](https://basescan.org) | [base.blockscout.com](https://base.blockscout.com) |
 
 ---
 
-## 🌐 Networks
+## Security
 
-| Network | Chain ID | RPC | Explorer |
-|---------|----------|-----|----------|
-| Base Sepolia | 84532 | https://sepolia.base.org | [Blockscout](https://base-sepolia.blockscout.com) |
-| Base Mainnet | 8453 | https://mainnet.base.org | [Basescan](https://basescan.org) |
+- ReentrancyGuard on all payment functions
+- Pausable on all mints, renewals, and factory deployments
+- ERC4626 `maxDeposit` enforces challenge deposit rules
+- Soulbound shares in ChallengeVault (non-transferable)
+- Soulbound option on IdentityNFT (configurable at deploy)
+- Identity gate on challenge creation (VaultFactory) and joining (ChallengeVault)
+- `IdentityNFTFactory.deployCollection()` restricted to owner
+- Custom errors everywhere (no `require` strings)
+- SafeERC20 for all token transfers
 
-**Current Deployment**: Base Sepolia  
-**Factory Address**: [`0xeb17fe8d57a6c546f67a9ac5661128ba12857f4f`](https://base-sepolia.blockscout.com/address/0xeb17fe8d57a6c546f67a9ac5661128ba12857f4f)
+> Not professionally audited. Use on testnets or at your own risk.
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Frontend Integration Guide](docs/Frontend-Integration-Guide.md) | **Complete guide to build a Web3 frontend** - React, ethers.js, user & admin views |
-| [Technical Reference](docs/Technical-Reference.md) | Architecture, contract specs, gas costs, security, integration examples |
+| [Technical Reference](docs_contracts/Technical-Reference.md) | Full API for all contracts |
+| [Frontend Integration Guide](docs_contracts/Frontend-Integration-Guide.md) | ethers.js patterns for token approvals, challenge flow, identity, courses |
 
 ---
 
-## 🔐 Security
+## Built With
 
-### Audit Status
-⚠️ **Not audited** - Use at your own risk on testnets
-
-### Security Features
-- ✅ ReentrancyGuard on minting and withdrawals
-- ✅ Pausable for emergency stops
-- ✅ Ownable access control
-- ✅ No upgradeable proxies (immutable logic)
-
-### Known Considerations
-- Treasury address validation on deployment
-- Exact payment amount required for minting
-- Content URI updates don't affect existing tokens
+- [Foundry](https://getfoundry.sh/) — Solidity testing & deployment
+- [OpenZeppelin v5](https://www.openzeppelin.com/) — ERC4626, ERC721, ERC2981, Ownable, Pausable, ReentrancyGuard
+- [Base](https://base.org/) — L2 on Ethereum
 
 ---
 
-## 🤝 Contributing
-
-Contributions welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-- Write tests for new features
-- Maintain test coverage >80%
-- Follow Solidity style guide
-- Run `forge fmt` before committing
-- Update documentation as needed
-
----
-
-## 📞 Support & Community
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/courses_nft/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/courses_nft/discussions)
-- **Documentation**: [docs/](docs/)
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-Built with:
-- [Foundry](https://getfoundry.sh/) - Ethereum development toolkit
-- [OpenZeppelin](https://www.openzeppelin.com/) - Secure smart contract library
-- [Base](https://base.org/) - L2 blockchain platform
-
----
-
-**Happy building! 🚀**
-
-*For frontend integration, check out the [Frontend Integration Guide](docs/Frontend-Integration-Guide.md)*
-# gaming-tower
+**License:** MIT

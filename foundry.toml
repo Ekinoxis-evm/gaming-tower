@@ -6,5 +6,24 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
 ]
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+
+[rpc_endpoints]
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+base         = "${BASE_RPC_URL}"
+
+# ── Verification ──────────────────────────────────────────────────────────────
+# Used by --verifier etherscan (Basescan)
+[etherscan]
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+base         = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+
+# Blockscout verifier URLs (pass via --verifier-url at CLI):
+#   Base Sepolia : https://base-sepolia.blockscout.com/api/
+#   Base Mainnet : https://base.blockscout.com/api/
+#
+# Sourcify (no API key needed, pass --verifier sourcify at CLI)
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

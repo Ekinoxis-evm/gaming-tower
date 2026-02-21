@@ -12,5 +12,4 @@ docs/
 
 # Dotenv file
 .env
-# Deployment addresses (environment-specific)
-deployments/addresses.json
+

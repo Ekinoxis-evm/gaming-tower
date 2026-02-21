@@ -1,0 +1,11 @@
+{
+  "84532": {
+    "chainId": 84532,
+    "chainName": "Base Sepolia",
+    "explorer": "https://base-sepolia.blockscout.com",
+    "timestamp": "2026-02-20T22:36:15.394Z",
+    "contracts": {
+      "CourseFactory": "0xeb17fe8d57a6c546f67a9ac5661128ba12857f4f"
+    }
+  }
+}
