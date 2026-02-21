@@ -1,4 +1,4 @@
-# Gaming Tower + Courses NFT
+# Tokenized Gaming Tower
 
 > A decentralized gaming and education platform on Base.
 > Players stake tokens to compete in number-submission challenges and maintain renewable identity profiles. Course creators monetize content through ETH-priced ERC-721 NFTs.
