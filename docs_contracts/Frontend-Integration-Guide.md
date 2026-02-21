@@ -13,12 +13,13 @@ Complete guide for building a frontend that interacts with all platform contract
 
 1. [Setup](#1-setup)
 2. [ERC-20 Token Approvals](#2-erc-20-token-approvals)
-3. [IdentityNFT — Mint, Renew & Profile](#3-identitynft--mint-renew--profile)
-4. [ChallengeVault — Challenge Flow](#4-challengevault--challenge-flow)
-5. [CourseNFT — Courses (ETH)](#5-coursenft--courses-eth)
-6. [Access-Control Checks](#6-access-control-checks)
-7. [Error Handling Reference](#7-error-handling-reference)
-8. [Best Practices](#8-best-practices)
+3. [IdentityNFTFactory — Admin: Deploy City Collections](#3-identitynftfactory--admin-deploy-city-collections)
+4. [IdentityNFT — Mint, Renew & Profile](#4-identitynft--mint-renew--profile)
+5. [ChallengeVault — Challenge Flow](#5-challengevault--challenge-flow)
+6. [CourseNFT — Courses (ETH)](#6-coursenft--courses-eth)
+7. [Access-Control Checks](#7-access-control-checks)
+8. [Error Handling Reference](#8-error-handling-reference)
+9. [Best Practices](#9-best-practices)
 
 ---
 
@@ -32,7 +33,7 @@ npm install ethers viem wagmi @tanstack/react-query @rainbow-me/rainbowkit
 
 ### Contract addresses config
 
-Load addresses from the auto-generated deployment file:
+Load addresses from the auto-generated deployment file. Never hardcode addresses in source.
 
 ```typescript
 // config/contracts.ts
@@ -40,15 +41,14 @@ import addresses from '@/deployments/addresses.json';
 
 export const CHAIN_ID = '84532'; // Base Sepolia
 
-const chain = addresses[CHAIN_ID];
+const chain = (addresses as any)[CHAIN_ID];
 
 export const ADDRESSES = {
-  IDENTITY_NFT:   chain.contracts.IdentityNFT   ?? '',
-  VAULT_FACTORY:  chain.contracts.VaultFactory   ?? '',
-  COURSE_FACTORY: chain.contracts.CourseFactory  ?? '',
+  IDENTITY_NFT_FACTORY: chain.contracts.IdentityNFTFactory ?? '',
+  IDENTITY_NFT:         chain.contracts.IdentityNFT        ?? '', // first city collection
+  VAULT_FACTORY:        chain.contracts.VaultFactory        ?? '',
+  COURSE_FACTORY:       chain.contracts.CourseFactory       ?? '',
 };
-
-export const RPC = chain.explorer; // or use your own RPC endpoint
 ```
 
 ### Shared provider helpers
@@ -74,7 +74,7 @@ export const getSigner = async () => {
 
 ## 2. ERC-20 Token Approvals
 
-All gaming contracts pull ERC-20 tokens from the user via `transferFrom`. The user must `approve` before any paid action.
+All gaming contracts pull ERC-20 tokens via `transferFrom`. Users must `approve` before any paid action.
 
 ```typescript
 import { ethers } from 'ethers';
@@ -82,14 +82,13 @@ import ERC20_ABI from '../abi/ERC20.json'; // standard ERC-20 ABI
 
 export const approveToken = async (tokenAddress: string, spender: string, amount: bigint) => {
   const signer = await getSigner();
-  const token = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-  const tx = await token.approve(spender, amount);
+  const token  = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+  const tx     = await token.approve(spender, amount);
   await tx.wait();
 };
 
 export const getTokenBalance = async (tokenAddress: string, user: string): Promise<bigint> => {
-  const provider = getProvider();
-  const token = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+  const token = new ethers.Contract(tokenAddress, ERC20_ABI, getProvider());
   return token.balanceOf(user);
 };
 
@@ -98,24 +97,18 @@ export const getTokenAllowance = async (
   owner: string,
   spender: string
 ): Promise<bigint> => {
-  const provider = getProvider();
-  const token = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+  const token = new ethers.Contract(tokenAddress, ERC20_ABI, getProvider());
   return token.allowance(owner, spender);
 };
 ```
 
-**Pattern for every ERC-20-paying action:**
+**Standard pattern before any ERC-20 payment:**
 
 ```typescript
-// 1. Check current allowance
 const allowance = await getTokenAllowance(TOKEN_ADDRESS, userAddress, contractAddress);
-
-// 2. Approve if insufficient
 if (allowance < requiredAmount) {
   await approveToken(TOKEN_ADDRESS, contractAddress, requiredAmount);
 }
-
-// 3. Call the contract function
 await contract.mint(...);
 ```
 
@@ -131,9 +124,93 @@ export const formatOneUpToCOP = (amountWei: bigint): string => {
 
 ---
 
-## 3. IdentityNFT — Mint, Renew & Profile
+## 3. IdentityNFTFactory — Admin: Deploy City Collections
 
-Users need a valid IdentityNFT to access the gaming tower. Cards are subscription-based. Each deployment is city-specific and accepts one or more ERC-20 tokens, each with independent pricing.
+Only the protocol admin (factory owner) can call `deployCollection`. This is the on-chain way to spin up new city IdentityNFT collections without running CLI scripts.
+
+```typescript
+import IdentityNFTFactoryABI from '../abi/IdentityNFTFactory.json';
+import { ADDRESSES } from '../config/contracts';
+
+const getIdentityNFTFactory = async (write = false) => {
+  const runner = write ? await getSigner() : getProvider();
+  return new ethers.Contract(ADDRESSES.IDENTITY_NFT_FACTORY, IdentityNFTFactoryABI, runner);
+};
+
+// ── Read ─────────────────────────────────────────────────────────────────────
+
+export const getAllCollections = async (): Promise<string[]> => {
+  const factory = await getIdentityNFTFactory();
+  return factory.getAllCollections();
+};
+
+export const getCollectionCount = async (): Promise<bigint> => {
+  const factory = await getIdentityNFTFactory();
+  return factory.getCollectionCount();
+};
+
+export const isFactoryCollection = async (address: string): Promise<boolean> => {
+  const factory = await getIdentityNFTFactory();
+  return factory.isCollection(address);
+};
+
+// ── Write (admin only) ────────────────────────────────────────────────────────
+
+export interface TokenConfig {
+  token: string;
+  mintPrice: bigint;
+  monthlyPrice: bigint;
+  yearlyPrice: bigint;
+}
+
+/**
+ * Deploy a new IdentityNFT city collection.
+ * Only callable by the protocol admin (factory owner).
+ */
+export const deployCollection = async (
+  name: string,
+  symbol: string,
+  city: string,
+  treasury: string,
+  soulbound: boolean,
+  initialTokens: TokenConfig[]
+): Promise<string> => {
+  const factory = await getIdentityNFTFactory(true);
+  const tx = await factory.deployCollection(
+    name, symbol, city, treasury, soulbound, initialTokens
+  );
+  const receipt = await tx.wait();
+  const event   = receipt.logs.find((l: any) => l.fragment?.name === 'CollectionDeployed');
+  return event?.args.collection; // new IdentityNFT address
+};
+```
+
+**Usage example (admin panel):**
+
+```typescript
+const collectionAddress = await deployCollection(
+  'Entry - Medellín',
+  'EMDE',
+  'Medellín',
+  treasuryAddress,
+  false,
+  [
+    {
+      token:        '0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f', // 1UP Sepolia
+      mintPrice:    50n * 10n ** 18n,   // 50 tokens
+      monthlyPrice: 20n * 10n ** 18n,   // 20 tokens
+      yearlyPrice:  200n * 10n ** 18n,  // 200 tokens
+    },
+  ]
+);
+console.log('New collection:', collectionAddress);
+```
+
+---
+
+## 4. IdentityNFT — Mint, Renew & Profile
+
+Users need a valid IdentityNFT to access the gaming tower. Each collection is city-specific and accepts one or more ERC-20 tokens with independent pricing.
 
 ### Period enum values (match contract)
 
@@ -146,84 +223,86 @@ export type PeriodValue = typeof Period[keyof typeof Period];
 import IdentityNFTABI from '../abi/IdentityNFT.json';
 import { ADDRESSES } from '../config/contracts';
 
-const getIdentityContract = async (write = false) => {
+// Pass a specific collection address or use the default from ADDRESSES
+const getIdentityContract = async (collectionAddress = ADDRESSES.IDENTITY_NFT, write = false) => {
   const runner = write ? await getSigner() : getProvider();
-  return new ethers.Contract(ADDRESSES.IDENTITY_NFT, IdentityNFTABI, runner);
+  return new ethers.Contract(collectionAddress, IdentityNFTABI, runner);
 };
 
 // ── Read ─────────────────────────────────────────────────────────────────────
 
-export const isIdentityValid = async (user: string): Promise<boolean> => {
-  const contract = await getIdentityContract();
+export const isIdentityValid = async (user: string, collection = ADDRESSES.IDENTITY_NFT): Promise<boolean> => {
+  const contract = await getIdentityContract(collection);
   return contract.isValid(user);
 };
 
-export const getIdentityExpiry = async (user: string): Promise<bigint> => {
-  const contract = await getIdentityContract();
+export const getIdentityExpiry = async (user: string, collection = ADDRESSES.IDENTITY_NFT): Promise<bigint> => {
+  const contract = await getIdentityContract(collection);
   return contract.expiryOfUser(user);
 };
 
-export const getIdentityStatus = async (tokenId: bigint): Promise<number> => {
+export const getIdentityStatus = async (tokenId: bigint, collection = ADDRESSES.IDENTITY_NFT): Promise<number> => {
   // Returns 0 = Active, 1 = Expired, 2 = Suspended
-  const contract = await getIdentityContract();
+  const contract = await getIdentityContract(collection);
   return contract.statusOf(tokenId);
 };
 
-export const getIdentityCreatedAt = async (tokenId: bigint): Promise<bigint> => {
-  const contract = await getIdentityContract();
+export const getIdentityCreatedAt = async (tokenId: bigint, collection = ADDRESSES.IDENTITY_NFT): Promise<bigint> => {
+  const contract = await getIdentityContract(collection);
   return contract.createdAt(tokenId);
 };
 
-export const getIdentityTokenURI = async (tokenId: bigint): Promise<string> => {
-  const contract = await getIdentityContract();
+export const getIdentityTokenURI = async (tokenId: bigint, collection = ADDRESSES.IDENTITY_NFT): Promise<string> => {
+  const contract = await getIdentityContract(collection);
   return contract.tokenURI(tokenId);
 };
 
-export const getTokenConfig = async (tokenAddress: string) => {
-  const contract = await getIdentityContract();
-  // Returns { mintPrice, monthlyPrice, yearlyPrice, enabled }
-  return contract.tokenConfigs(tokenAddress);
+export const getTokenConfig = async (tokenAddress: string, collection = ADDRESSES.IDENTITY_NFT) => {
+  const contract = await getIdentityContract(collection);
+  return contract.tokenConfigs(tokenAddress); // { mintPrice, monthlyPrice, yearlyPrice, enabled }
 };
 
-export const getAcceptedTokens = async (): Promise<string[]> => {
-  const contract = await getIdentityContract();
+export const getAcceptedTokens = async (collection = ADDRESSES.IDENTITY_NFT): Promise<string[]> => {
+  const contract = await getIdentityContract(collection);
   return contract.getAcceptedTokens();
 };
 
-export const getTokenIdOf = async (user: string): Promise<bigint> => {
-  const contract = await getIdentityContract();
+export const getTokenIdOf = async (user: string, collection = ADDRESSES.IDENTITY_NFT): Promise<bigint> => {
+  const contract = await getIdentityContract(collection);
   return contract.tokenIdOf(user);
 };
 
-export const getCity = async (): Promise<string> => {
-  const contract = await getIdentityContract();
+export const getCity = async (collection = ADDRESSES.IDENTITY_NFT): Promise<string> => {
+  const contract = await getIdentityContract(collection);
   return contract.city();
 };
 
 // ── Write ─────────────────────────────────────────────────────────────────────
 
 /**
- * Mint a new identity card.
- * @param metadataURI  IPFS URI for the profile metadata.
+ * Mint a new identity card. One per address.
+ * @param metadataURI  IPFS URI for profile metadata.
  * @param period       Period.Monthly or Period.Yearly.
  * @param tokenAddress ERC-20 token to use for payment.
+ * @param collection   IdentityNFT collection address (defaults to ADDRESSES.IDENTITY_NFT).
  */
 export const mintIdentity = async (
   metadataURI: string,
   period: PeriodValue,
-  tokenAddress: string
+  tokenAddress: string,
+  collection = ADDRESSES.IDENTITY_NFT
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const contract = await getIdentityContract(true);
-  const signer   = await getSigner();
+  const contract    = await getIdentityContract(collection, true);
+  const signer      = await getSigner();
   const userAddress = await signer.getAddress();
 
-  const cfg = await contract.tokenConfigs(tokenAddress);
+  const cfg        = await contract.tokenConfigs(tokenAddress);
   const mintPrice: bigint = cfg.mintPrice;
 
   if (mintPrice > 0n) {
-    const allowance = await getTokenAllowance(tokenAddress, userAddress, ADDRESSES.IDENTITY_NFT);
+    const allowance = await getTokenAllowance(tokenAddress, userAddress, collection);
     if (allowance < mintPrice) {
-      await approveToken(tokenAddress, ADDRESSES.IDENTITY_NFT, mintPrice);
+      await approveToken(tokenAddress, collection, mintPrice);
     }
   }
 
@@ -232,27 +311,29 @@ export const mintIdentity = async (
 };
 
 /**
- * Renew an identity card subscription.
+ * Renew a subscription.
  * @param tokenId      Token to renew.
  * @param period       Period.Monthly or Period.Yearly.
  * @param tokenAddress ERC-20 token to use for payment (can differ from mint token).
+ * @param collection   IdentityNFT collection address.
  */
 export const renewIdentity = async (
   tokenId: bigint,
   period: PeriodValue,
-  tokenAddress: string
+  tokenAddress: string,
+  collection = ADDRESSES.IDENTITY_NFT
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const contract = await getIdentityContract(true);
-  const signer   = await getSigner();
+  const contract    = await getIdentityContract(collection, true);
+  const signer      = await getSigner();
   const userAddress = await signer.getAddress();
 
   const cfg   = await contract.tokenConfigs(tokenAddress);
   const price: bigint = period === Period.Monthly ? cfg.monthlyPrice : cfg.yearlyPrice;
 
   if (price > 0n) {
-    const allowance = await getTokenAllowance(tokenAddress, userAddress, ADDRESSES.IDENTITY_NFT);
+    const allowance = await getTokenAllowance(tokenAddress, userAddress, collection);
     if (allowance < price) {
-      await approveToken(tokenAddress, ADDRESSES.IDENTITY_NFT, price);
+      await approveToken(tokenAddress, collection, price);
     }
   }
 
@@ -262,9 +343,10 @@ export const renewIdentity = async (
 
 export const updateIdentityMetadata = async (
   tokenId: bigint,
-  newURI: string
+  newURI: string,
+  collection = ADDRESSES.IDENTITY_NFT
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const contract = await getIdentityContract(true);
+  const contract = await getIdentityContract(collection, true);
   const tx = await contract.updateMetadata(tokenId, newURI);
   return tx.wait();
 };
@@ -286,7 +368,7 @@ import { useEffect, useState } from 'react';
 import {
   isIdentityValid, getIdentityExpiry, getIdentityStatus,
   getIdentityCreatedAt, mintIdentity, renewIdentity,
-  Period, getStatusLabel, getAcceptedTokens, getTokenConfig,
+  Period, getStatusLabel,
 } from '../utils/identity';
 
 const ONE_UP_SEPOLIA = '0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f';
@@ -294,12 +376,14 @@ const ONE_UP_SEPOLIA = '0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f';
 export const IdentityCard = ({
   userAddress,
   tokenId,
+  collection,
 }: {
   userAddress: string;
   tokenId: bigint;
+  collection: string;
 }) => {
   const [valid, setValid]     = useState(false);
-  const [status, setStatus]   = useState<string>('Unknown');
+  const [status, setStatus]   = useState('Unknown');
   const [expiry, setExpiry]   = useState<Date | null>(null);
   const [created, setCreated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
@@ -307,10 +391,10 @@ export const IdentityCard = ({
   useEffect(() => {
     (async () => {
       const [v, exp, s, cr] = await Promise.all([
-        isIdentityValid(userAddress),
-        getIdentityExpiry(userAddress),
-        getIdentityStatus(tokenId),
-        getIdentityCreatedAt(tokenId),
+        isIdentityValid(userAddress, collection),
+        getIdentityExpiry(userAddress, collection),
+        getIdentityStatus(tokenId, collection),
+        getIdentityCreatedAt(tokenId, collection),
       ]);
       setValid(v);
       setStatus(getStatusLabel(Number(s)));
@@ -318,7 +402,7 @@ export const IdentityCard = ({
       if (cr > 0n)   setCreated(new Date(Number(cr) * 1000));
       setLoading(false);
     })();
-  }, [userAddress, tokenId]);
+  }, [userAddress, tokenId, collection]);
 
   if (loading) return <p>Loading identity...</p>;
 
@@ -330,10 +414,10 @@ export const IdentityCard = ({
 
       {!valid && (
         <div>
-          <button onClick={() => mintIdentity('ipfs://your-metadata', Period.Monthly, ONE_UP_SEPOLIA)}>
+          <button onClick={() => mintIdentity('ipfs://your-metadata', Period.Monthly, ONE_UP_SEPOLIA, collection)}>
             Mint Monthly
           </button>
-          <button onClick={() => mintIdentity('ipfs://your-metadata', Period.Yearly, ONE_UP_SEPOLIA)}>
+          <button onClick={() => mintIdentity('ipfs://your-metadata', Period.Yearly, ONE_UP_SEPOLIA, collection)}>
             Mint Yearly
           </button>
         </div>
@@ -341,10 +425,10 @@ export const IdentityCard = ({
 
       {valid && (
         <div>
-          <button onClick={() => renewIdentity(tokenId, Period.Monthly, ONE_UP_SEPOLIA)}>
+          <button onClick={() => renewIdentity(tokenId, Period.Monthly, ONE_UP_SEPOLIA, collection)}>
             Renew Monthly
           </button>
-          <button onClick={() => renewIdentity(tokenId, Period.Yearly, ONE_UP_SEPOLIA)}>
+          <button onClick={() => renewIdentity(tokenId, Period.Yearly, ONE_UP_SEPOLIA, collection)}>
             Renew Yearly
           </button>
         </div>
@@ -356,12 +440,12 @@ export const IdentityCard = ({
 
 ---
 
-## 4. ChallengeVault — Challenge Flow
+## 5. ChallengeVault — Challenge Flow
 
-### 4a. Create a challenge
+### 5a. Create a challenge
 
 ```typescript
-import VaultFactoryABI  from '../abi/VaultFactory.json';
+import VaultFactoryABI   from '../abi/VaultFactory.json';
 import ChallengeVaultABI from '../abi/ChallengeVault.json';
 import { ADDRESSES } from '../config/contracts';
 
@@ -378,7 +462,7 @@ const getVaultContract = async (vaultAddress: string, write = false) => {
 /**
  * Deploy a new ChallengeVault.
  * Caller must have a valid IdentityNFT.
- * After this call: approve stakeAmount of token to vault, then call deposit().
+ * After this: approve stakeAmount of token to vault, then call deposit().
  */
 export const createChallenge = async (
   tokenAddress: string,
@@ -387,28 +471,27 @@ export const createChallenge = async (
   metadataURI: string
 ): Promise<string> => {
   const factory = await getVaultFactoryContract(true);
-  const tx = await factory.createChallenge(tokenAddress, stakeAmountWei, durationSeconds, metadataURI);
+  const tx      = await factory.createChallenge(tokenAddress, stakeAmountWei, durationSeconds, metadataURI);
   const receipt = await tx.wait();
-  const event = receipt.logs.find((l: any) => l.fragment?.name === 'VaultCreated');
+  const event   = receipt.logs.find((l: any) => l.fragment?.name === 'VaultCreated');
   return event?.args.vault; // vault address
 };
 ```
 
-### 4b. Join a challenge (deposit tokens)
+### 5b. Join a challenge (deposit tokens)
 
 ```typescript
 /**
- * Join an existing ChallengeVault by depositing the stake.
- * Player2 must have a valid IdentityNFT.
+ * Join a ChallengeVault by depositing the stake.
+ * Player2 must have a valid IdentityNFT (checked on-chain).
  */
 export const joinChallenge = async (
   vaultAddress: string,
   tokenAddress: string
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const vault = await getVaultContract(vaultAddress, true);
-  const signer = await getSigner();
+  const vault       = await getVaultContract(vaultAddress, true);
+  const signer      = await getSigner();
   const userAddress = await signer.getAddress();
-
   const stakeAmount: bigint = await vault.stakeAmount();
 
   const allowance = await getTokenAllowance(tokenAddress, userAddress, vaultAddress);
@@ -421,24 +504,24 @@ export const joinChallenge = async (
 };
 ```
 
-### 4c. Submit a number (after endTime)
+### 5c. Submit a number (after endTime)
 
 ```typescript
 /**
  * Submit your number after the challenge window ends.
- * Highest number wins. Call after block.timestamp >= vault.endTime().
+ * Highest number wins. Call only after block.timestamp >= vault.endTime().
  */
 export const submitNumber = async (
   vaultAddress: string,
   number: bigint
 ): Promise<ethers.ContractTransactionReceipt> => {
   const vault = await getVaultContract(vaultAddress, true);
-  const tx = await vault.submitNumber(number);
+  const tx    = await vault.submitNumber(number);
   return tx.wait();
 };
 ```
 
-### 4d. Read vault state
+### 5d. Read vault state
 
 ```typescript
 export interface VaultState {
@@ -486,9 +569,16 @@ export const getVaultState = async (vaultAddress: string): Promise<VaultState> =
     player2Number: n2,
   };
 };
+
+export const canSubmitNumber = async (vaultAddress: string): Promise<boolean> => {
+  const vault   = await getVaultContract(vaultAddress);
+  const [state, endTime] = await Promise.all([vault.state(), vault.endTime()]);
+  const nowSec  = BigInt(Math.floor(Date.now() / 1000));
+  return Number(state) === 1 /* ACTIVE */ && nowSec >= endTime;
+};
 ```
 
-### 4e. Full challenge flow diagram
+### 5e. Full challenge flow diagram
 
 > **Identity requirement:** Both Creator and Player 2 must hold a valid (active, non-suspended) IdentityNFT. Creator's identity is checked at step 1; Player 2's identity is checked at step 5.
 
@@ -511,7 +601,7 @@ Creator                                  Player 2
    │                                        │    → identity check on player2
    │                                        │    → ACTIVE, endTime set
    │                                        │
-   │ ◄──── wait for endTime ──────────────► │
+   │ ◄───────── wait for endTime ─────────► │
    │                                        │
    │ 6. vault.submitNumber(myNumber)        │ 6. vault.submitNumber(myNumber)
    │                                        │
@@ -522,7 +612,7 @@ Creator                                  Player 2
 
 ---
 
-## 5. CourseNFT — Courses (ETH)
+## 6. CourseNFT — Courses (ETH)
 
 CourseNFT uses ETH, not ERC-20 tokens. No `approve` step needed.
 
@@ -577,26 +667,20 @@ export const getCourseContent = async (courseAddress: string, tokenId: bigint): 
 
 // ── Write ─────────────────────────────────────────────────────────────────────
 
-/**
- * Mint a course NFT to the caller. Sends exactly mintPrice ETH.
- */
 export const mintCourse = async (
   courseAddress: string
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const course = await getCourseNFTContract(courseAddress, true);
+  const course    = await getCourseNFTContract(courseAddress, true);
   const mintPrice: bigint = await course.mintPrice();
   const tx = await course.mint({ value: mintPrice });
   return tx.wait();
 };
 
-/**
- * Mint a course NFT to a recipient. Caller pays.
- */
 export const mintCourseTo = async (
   courseAddress: string,
   recipient: string
 ): Promise<ethers.ContractTransactionReceipt> => {
-  const course = await getCourseNFTContract(courseAddress, true);
+  const course    = await getCourseNFTContract(courseAddress, true);
   const mintPrice: bigint = await course.mintPrice();
   const tx = await course.mintTo(recipient, { value: mintPrice });
   return tx.wait();
@@ -605,7 +689,7 @@ export const mintCourseTo = async (
 
 ---
 
-## 6. Access-Control Checks
+## 7. Access-Control Checks
 
 Gate UI features behind on-chain checks. A valid IdentityNFT is the only requirement to create or join a challenge.
 
@@ -613,22 +697,19 @@ Gate UI features behind on-chain checks. A valid IdentityNFT is the only require
 export interface UserAccess {
   hasValidIdentity: boolean;
   identityExpiry: Date | null;
-  identityStatus: string;      // 'Active' | 'Expired' | 'Suspended' | 'None'
+  identityStatus: string;     // 'Active' | 'Expired' | 'Suspended' | 'None'
   identityTokenId: bigint;
 }
 
-export const getUserAccess = async (userAddress: string): Promise<UserAccess> => {
-  const contract = await getIdentityContract();
-
+export const getUserAccess = async (
+  userAddress: string,
+  collection = ADDRESSES.IDENTITY_NFT
+): Promise<UserAccess> => {
+  const contract = await getIdentityContract(collection);
   const tokenId: bigint = await contract.tokenIdOf(userAddress);
 
   if (tokenId === 0n) {
-    return {
-      hasValidIdentity: false,
-      identityExpiry:   null,
-      identityStatus:   'None',
-      identityTokenId:  0n,
-    };
+    return { hasValidIdentity: false, identityExpiry: null, identityStatus: 'None', identityTokenId: 0n };
   }
 
   const [hasValidIdentity, expiryTs, statusNum] = await Promise.all([
@@ -651,17 +732,23 @@ export const getUserAccess = async (userAddress: string): Promise<UserAccess> =>
 ```tsx
 import { useEffect, useState } from 'react';
 import { isIdentityValid } from '../utils/identity';
+import { ADDRESSES } from '../config/contracts';
 
-export const RequiresIdentity = ({ children, userAddress }: {
+export const RequiresIdentity = ({
+  children,
+  userAddress,
+  collection = ADDRESSES.IDENTITY_NFT,
+}: {
   children: React.ReactNode;
   userAddress: string;
+  collection?: string;
 }) => {
   const [valid, setValid] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!userAddress) return;
-    isIdentityValid(userAddress).then(setValid);
-  }, [userAddress]);
+    isIdentityValid(userAddress, collection).then(setValid);
+  }, [userAddress, collection]);
 
   if (valid === null) return <p>Checking identity...</p>;
   if (!valid) return <p>You need a valid Identity NFT to access this feature.</p>;
@@ -671,9 +758,7 @@ export const RequiresIdentity = ({ children, userAddress }: {
 
 ---
 
-## 7. Error Handling Reference
-
-Map contract custom errors to user-friendly messages:
+## 8. Error Handling Reference
 
 ```typescript
 const CONTRACT_ERRORS: Record<string, string> = {
@@ -720,7 +805,7 @@ export const parseContractError = (error: any): string => {
 
 ---
 
-## 8. Best Practices
+## 9. Best Practices
 
 ### Network check
 
@@ -737,11 +822,8 @@ export const ensureBaseSepolia = async () => {
 ### Wait for confirmations
 
 ```typescript
-// Development: 1 confirmation
-const receipt = await tx.wait(1);
-
-// Production: 2+ confirmations
-const receipt = await tx.wait(2);
+const receipt = await tx.wait(1); // development
+const receipt = await tx.wait(2); // production
 ```
 
 ### IPFS loading
@@ -751,20 +833,8 @@ export const ipfsToHTTP = (uri: string, gateway = 'https://ipfs.io/ipfs/'): stri
   uri.replace('ipfs://', gateway);
 
 export const fetchIPFSMetadata = async (uri: string) => {
-  const url = ipfsToHTTP(uri);
-  const res = await fetch(url);
+  const res = await fetch(ipfsToHTTP(uri));
   return res.json();
-};
-```
-
-### Check endTime before submitNumber
-
-```typescript
-export const canSubmitNumber = async (vaultAddress: string): Promise<boolean> => {
-  const vault = await getVaultContract(vaultAddress);
-  const [state, endTime] = await Promise.all([vault.state(), vault.endTime()]);
-  const nowSec = BigInt(Math.floor(Date.now() / 1000));
-  return Number(state) === 1 /* ACTIVE */ && nowSec >= endTime;
 };
 ```
 
@@ -775,6 +845,7 @@ src/
 ├── config/
 │   └── contracts.ts          # Addresses loaded from deployments/addresses.json
 ├── abi/
+│   ├── IdentityNFTFactory.json
 │   ├── IdentityNFT.json
 │   ├── VaultFactory.json
 │   ├── ChallengeVault.json
@@ -783,6 +854,7 @@ src/
 ├── utils/
 │   ├── provider.ts           # Provider / signer helpers
 │   ├── token.ts              # ERC-20 approve / balance / allowance
+│   ├── identityFactory.ts    # IdentityNFTFactory admin functions
 │   ├── identity.ts           # IdentityNFT read/write
 │   ├── vault.ts              # ChallengeVault read/write
 │   └── courseNFT.ts          # CourseNFT read/write
@@ -790,6 +862,7 @@ src/
 │   ├── useIdentity.ts
 │   └── useChallenges.ts
 └── pages/
+    ├── AdminPage.tsx          # deployCollection() — requires factory owner wallet
     ├── TowerPage.tsx          # Requires active IdentityNFT
     ├── ChallengePage.tsx      # Create/join/submit challenges
     └── CoursesPage.tsx        # Browse & mint courses
@@ -797,15 +870,15 @@ src/
 
 ### Deployment checklist
 
-- [ ] Deploy IdentityNFT first, then VaultFactory (order matters)
+- [ ] Deploy `IdentityNFTFactory` first, then deploy the first city collection via `deployCollection()`
+- [ ] Set `IDENTITY_NFT` in `.env` to the first city collection address before deploying VaultFactory
 - [ ] Run `node script/extract-abis.js` after `forge build`
-- [ ] Run `node script/extract-addresses.js <chainId>` after each deployment
-- [ ] Load `ADDRESSES` from `deployments/addresses.json` — never hardcode in source
-- [ ] Gate challenge UI behind `isValid(userAddress)` check
-- [ ] Test on Base Sepolia before mainnet
-- [ ] Handle `ACTION_REJECTED` (user cancel) gracefully
+- [ ] Load all `ADDRESSES` from `deployments/addresses.json` — never hardcode
+- [ ] Gate challenge UI behind `isValid(userAddress, collection)` check
 - [ ] Check `canMint()` before showing mint button on CourseNFT
 - [ ] Check `canSubmitNumber()` before showing submit button on ChallengeVault
+- [ ] Test on Base Sepolia before mainnet
+- [ ] Handle `ACTION_REJECTED` (user cancel) gracefully
 - [ ] Show spinner between tx submission and confirmation
 - [ ] Refresh state after successful transactions
 - [ ] Display 1UP amounts in both 1UP and COP (1 1UP = 1 000 COP)

@@ -9,12 +9,13 @@
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [IdentityNFT](#2-identitynft)
-3. [ChallengeVault](#3-challengevault)
-4. [VaultFactory](#4-vaultfactory)
-5. [CourseNFT](#5-coursenft)
-6. [CourseFactory](#6-coursefactory)
-7. [Deploy Commands](#7-deploy-commands)
+2. [IdentityNFTFactory](#2-identitynftfactory)
+3. [IdentityNFT](#3-identitynft)
+4. [ChallengeVault](#4-challengevault)
+5. [VaultFactory](#5-vaultfactory)
+6. [CourseNFT](#6-coursenft)
+7. [CourseFactory](#7-coursefactory)
+8. [Deploy Commands](#8-deploy-commands)
 
 ---
 
@@ -22,43 +23,134 @@
 
 ```
 Gaming Tower + Courses NFT Platform
-├── IdentityNFT    (subscription profile card — city-based, multi-token)
 │
-├── VaultFactory   ──deploys──► ChallengeVault (token escrow, EIP-4626, number game)
+├── IdentityNFTFactory ──deploys──► IdentityNFT  (city collection, subscription card)
 │
-└── CourseFactory  ──deploys──► CourseNFT (ERC-721, ETH payments, ERC-2981 royalties)
+├── VaultFactory       ──deploys──► ChallengeVault (token escrow, EIP-4626, number game)
+│
+└── CourseFactory      ──deploys──► CourseNFT (ERC-721, ETH payments, ERC-2981 royalties)
 ```
 
 **Payment currencies:**
-- `IdentityNFT` — any whitelisted ERC-20 token (1UP, USDC, EUROC — configured per deployment)
+- `IdentityNFT` — any whitelisted ERC-20 token (1UP, USDC, EUROC — configured per collection)
 - `ChallengeVault` — whitelisted ERC-20 token chosen at challenge creation
 - `CourseNFT` — ETH (native)
 
 **Access control:** A valid (active, non-suspended) IdentityNFT is the only gate to create or join a challenge.
 
-**Factory pattern:** Each factory deploys child contracts and tracks them. Ownership of each child is transferred to the caller on creation.
+**City collections:** Each `IdentityNFT` is an independent city-specific collection (e.g. "Medellín"). The admin deploys them on-chain via `IdentityNFTFactory.deployCollection()` — no per-city CLI script needed.
+
+**Factory pattern:** `IdentityNFTFactory` keeps ownership of collections with the protocol admin. `CourseFactory` and `VaultFactory` transfer ownership of each child to the caller on creation.
 
 **Challenge resolution:** Players submit a number after the challenge window ends. Highest number wins. Resolver breaks ties.
 
 ---
 
-## 2. IdentityNFT
+## 2. IdentityNFTFactory
+
+**File:** `src/IdentityNFTFactory.sol`
+**Inherits:** `Ownable`
+
+Admin-only factory that deploys `IdentityNFT` city collections on-chain. Deployed once per network. Non-technical admins can then call `deployCollection()` from a frontend wallet to spin up new city collections without running CLI scripts. Ownership of each deployed collection is transferred immediately to `factory.owner()` (the protocol admin), so all admin functions on every collection are accessible through a single wallet.
+
+### Constructor
+
+```solidity
+constructor()
+```
+
+Sets `msg.sender` as the owner (protocol admin).
+
+### State Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `allCollections` | `address[]` | All deployed IdentityNFT collection addresses |
+| `isCollection` | `mapping(address => bool)` | True for factory-deployed collections |
+
+---
+
+### Read Functions
+
+#### `getAllCollections() → address[]`
+
+Returns all IdentityNFT collection addresses deployed by this factory.
+
+---
+
+#### `getCollectionCount() → uint256`
+
+Returns the total number of collections deployed.
+
+---
+
+#### `isCollection(address) → bool`
+
+Returns `true` if the address was deployed by this factory.
+
+---
+
+### Write Functions
+
+#### `deployCollection(string name, string symbol, string city, address treasury, bool soulbound, IdentityNFT.InitialTokenConfig[] initialTokens) → address collection`
+
+Deploy a new `IdentityNFT` city collection. Restricted to the factory owner.
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | ERC-721 name (e.g. `"Entry - Medellín"`) |
+| `symbol` | ERC-721 symbol (e.g. `"EMDE"`) |
+| `city` | City label stored on-chain (e.g. `"Medellín"`) |
+| `treasury` | Address that receives all mint and renewal fees |
+| `soulbound` | If `true`: tokens in this collection are non-transferable |
+| `initialTokens` | Array of `{ token, mintPrice, monthlyPrice, yearlyPrice }` — at least one required |
+
+**Flow:**
+1. Deploys a new `IdentityNFT(name, symbol, city, treasury, soulbound, initialTokens)`.
+2. Transfers ownership of the collection to `factory.owner()` (the protocol admin).
+3. Registers the address in `allCollections` and `isCollection`.
+4. Emits `CollectionDeployed`.
+5. Returns the collection address.
+
+**Access:** `onlyOwner`
+
+---
+
+### Events
+
+```solidity
+event CollectionDeployed(
+    address indexed collection,
+    string  name,
+    string  symbol,
+    string  city,
+    address indexed treasury
+);
+```
+
+---
+
+## 3. IdentityNFT
 
 **File:** `src/IdentityNFT.sol`
 **Inherits:** `ERC721`, `Ownable`, `Pausable`, `ReentrancyGuard`
 
-Renewable subscription-based profile NFT ("Identity Card") for the gaming tower. One card per address. Each deployment is a city-specific collection (e.g. "Medellín", "Bogotá"). Payments are accepted in any configured ERC-20 token, each with its own price schedule. Admin can suspend any card regardless of payment status. Can be configured as soulbound (non-transferable).
+Renewable subscription-based profile NFT ("Identity Card") for the gaming tower. One card per address. Each deployment is city-specific. Payments are accepted in any configured ERC-20 token, each with its own price schedule. Admin can suspend any card regardless of payment status. Can be configured as soulbound (non-transferable).
+
+Deployed via `IdentityNFTFactory.deployCollection()`. Owned by the protocol admin (factory owner).
 
 ### Constructor
 
 ```solidity
 constructor(
-    string  memory _name,           // ERC-721 name (e.g. "Entry - Medellín")
-    string  memory _symbol,         // ERC-721 symbol (e.g. "EMDE")
+    string  memory _name,
+    string  memory _symbol,
     string  memory _city,           // City label stored on-chain
     address        _treasury,       // Receives all mint and renewal fees
     bool           _soulbound,      // If true: tokens cannot be transferred
-    InitialTokenConfig[] memory _initialTokens  // Payment token configurations
+    InitialTokenConfig[] memory _initialTokens
 )
 ```
 
@@ -90,7 +182,7 @@ struct InitialTokenConfig {
 ### Enums
 
 ```solidity
-enum Period { Monthly, Yearly }          // Chosen at mint and every renewal
+enum Period { Monthly, Yearly }            // Chosen at mint and every renewal
 enum Status { Active, Expired, Suspended } // Derived — never stored, always computed
 ```
 
@@ -115,9 +207,9 @@ enum Status { Active, Expired, Suspended } // Derived — never stored, always c
 
 Returns `true` if `user` holds an active, non-suspended identity card.
 
-- Checks `tokenIdOf[user] != 0` (card exists)
-- Checks `!suspended[tokenId]` (not admin-suspended)
-- Checks `expiryOf[tokenId] >= block.timestamp` (subscription active)
+- `tokenIdOf[user] != 0` (card exists)
+- `!suspended[tokenId]` (not admin-suspended)
+- `expiryOf[tokenId] >= block.timestamp` (subscription active)
 
 This is the gate used by `VaultFactory` and `ChallengeVault`.
 
@@ -143,25 +235,25 @@ Returns the expiry timestamp for `user`'s token. Returns `0` if the user has no 
 
 #### `tokenURI(uint256 tokenId) → string`
 
-Returns the stored per-token IPFS metadata URI (pfp, background, socials, etc.). Reverts if token does not exist.
+Returns the stored per-token IPFS metadata URI. Reverts if token does not exist.
 
 ---
 
 #### `totalSupply() → uint256`
 
-Returns the total number of identity cards minted so far.
+Total identity cards minted in this collection.
 
 ---
 
 #### `getAcceptedTokens() → address[]`
 
-Returns the list of all token addresses that have ever been configured (enabled or disabled). Use `tokenConfigs[token].enabled` to check active status.
+Returns all token addresses that have ever been configured (enabled or disabled).
 
 ---
 
 #### `tokenConfigs(address token) → TokenConfig`
 
-Returns the full price schedule for a given token address.
+Returns the full price schedule for a given payment token.
 
 ---
 
@@ -184,24 +276,23 @@ Mint a new identity card. One per address.
 4. Mints token, sets `createdAt`, `expiryOf` (now + period duration), and metadata URI.
 5. Emits `IdentityMinted` and `MetadataUpdated`.
 
-**Requires:** caller has approved at least `mintPrice` to this contract.
+**Requires:** caller has approved at least `mintPrice` of `token` to this contract.
 **Guard:** `whenNotPaused`, `nonReentrant`
 
 ---
 
 #### `renew(uint256 tokenId, Period period, address token)`
 
-Renew a subscription. Anyone can pay (e.g. a friend sponsors the renewal).
+Renew a subscription. Anyone can pay (sponsorship supported).
 
 **Renewal logic:**
 - Still active → `newExpiry = expiryOf[tokenId] + period` (paid days preserved)
 - Already expired → `newExpiry = block.timestamp + period` (fresh start, no grace period)
 
-**Flow:**
-1. Reverts `NoIdentityFound` if token has no expiry (does not exist).
+1. Reverts `NoIdentityFound` if token does not exist.
 2. Reverts `TokenNotAccepted` if `token` is not enabled.
 3. Pulls renewal price from caller → treasury.
-4. Updates `expiryOf[tokenId]` per the renewal logic above.
+4. Updates `expiryOf[tokenId]`.
 5. Emits `IdentityRenewed`.
 
 **Note:** The token used for renewal may differ from the token used at mint.
@@ -211,10 +302,8 @@ Renew a subscription. Anyone can pay (e.g. a friend sponsors the renewal).
 
 #### `updateMetadata(uint256 tokenId, string newURI)`
 
-Update the IPFS metadata URI for a card. Only the token owner can call this.
-
-Reverts `NotTokenOwner` if `msg.sender != ownerOf(tokenId)`.
-Emits `MetadataUpdated`.
+Update the IPFS metadata URI. Only the token owner can call this.
+Reverts `NotTokenOwner`. Emits `MetadataUpdated`.
 
 ---
 
@@ -222,37 +311,27 @@ Emits `MetadataUpdated`.
 
 #### `suspend(uint256 tokenId)`
 
-Immediately blocks platform access for a card regardless of payment status. Use for misbehaviour enforcement. Reverts `NoIdentityFound` if token does not exist. Emits `Suspended`.
-
----
+Immediately blocks platform access regardless of payment. Reverts `NoIdentityFound`. Emits `Suspended`.
 
 #### `unsuspend(uint256 tokenId)`
 
-Restores a previously suspended card. Emits `Unsuspended`.
-
----
+Restores a suspended card. Emits `Unsuspended`.
 
 #### `setTokenConfig(address token, uint256 mintPrice, uint256 monthlyPrice, uint256 yearlyPrice)`
 
-Add or update a payment token configuration. Re-calling with an existing token re-enables it if previously disabled. Reverts `ZeroAddress` if `token == address(0)`. Emits `TokenConfigSet`.
-
----
+Add or update a payment token. Re-enables a previously disabled token. Reverts `ZeroAddress`. Emits `TokenConfigSet`.
 
 #### `disableToken(address token)`
 
-Disable a payment token. Disabled tokens cannot be used for new mint or renewal calls. Emits `TokenDisabled`.
-
----
+Disable a payment token. Disabled tokens cannot be used for new payments. Emits `TokenDisabled`.
 
 #### `setTreasury(address newTreasury)`
 
 Update the treasury address. Reverts `ZeroAddress`. Emits `TreasuryUpdated`.
 
----
-
 #### `pause() / unpause()`
 
-Emergency pause — blocks `mint` and `renew`. Emits `Paused` / `Unpaused`.
+Emergency pause — blocks `mint` and `renew`.
 
 ---
 
@@ -272,22 +351,22 @@ event TreasuryUpdated(address indexed newTreasury);
 ### Custom Errors
 
 ```solidity
-error AlreadyHasIdentity();         // Caller already owns an identity card
-error NoIdentityFound();            // tokenId does not exist
-error NotTokenOwner();              // Only the token owner can update metadata
-error SoulboundToken();             // Transfer blocked (soulbound mode)
-error ZeroAddress();                // Address parameter is zero
-error TokenNotAccepted(address token); // Token not in the whitelist or disabled
+error AlreadyHasIdentity();
+error NoIdentityFound();
+error NotTokenOwner();
+error SoulboundToken();
+error ZeroAddress();
+error TokenNotAccepted(address token);
 ```
 
 ---
 
-## 3. ChallengeVault
+## 4. ChallengeVault
 
 **File:** `src/challenges/ChallengeVault.sol`
 **Inherits:** `ERC4626`, `ERC20`, `Ownable`, `Pausable`, `ReentrancyGuard`
 
-EIP-4626 escrow vault for a single two-player challenge. Players stake equal amounts of an ERC-20 token. After the challenge duration ends, each player submits a number — the higher number wins. In case of a tie, the resolver decides. Shares are non-transferable (soulbound to players). Withdrawals are disabled; funds are released only through the resolution mechanism.
+EIP-4626 escrow vault for a single two-player challenge. Players stake equal amounts of an ERC-20 token. After the challenge duration ends, each player submits a number — the higher number wins. In case of a tie, the resolver decides. Shares are non-transferable (soulbound). Withdrawals are disabled; funds are released only through resolution.
 
 ### State Machine
 
@@ -301,10 +380,10 @@ OPEN ──(player2 deposits)──► ACTIVE ──(both submit numbers, highes
 
 ```solidity
 constructor(
-    IERC20  _token,          // ERC-20 staking token
+    IERC20  _token,
     uint256 _stakeAmount,    // Exact amount each player must deposit (token wei)
     uint256 _duration,       // Challenge window in seconds (starts when ACTIVE)
-    string  memory _metadataURI,  // IPFS URI describing the challenge
+    string  memory _metadataURI,
     address _resolver,       // Trusted address that breaks ties
     address _player1,        // Challenge creator (set by VaultFactory)
     address _identityNFT     // IdentityNFT contract — player2 isValid() checked at deposit
@@ -317,7 +396,7 @@ constructor(
 |----------|------|-------------|
 | `stakeAmount` | `uint256 immutable` | Token amount each player must deposit |
 | `challengeDuration` | `uint256 immutable` | Duration in seconds from activation |
-| `identityNFT` | `IIdentityNFT immutable` | Identity contract checked when player2 deposits |
+| `identityNFT` | `IIdentityNFT immutable` | Identity contract — checked when player2 deposits |
 | `metadataURI` | `string` | IPFS URI for challenge metadata |
 | `resolver` | `address` | Trusted address for tie-breaking |
 | `player1` | `address` | Challenge creator |
@@ -336,47 +415,22 @@ constructor(
 
 Returns `stakeAmount` when a deposit slot is available for `account`, `0` otherwise.
 
-Rules:
-- Returns `0` if state is not `OPEN`
-- Returns `0` if `account == player1` and player1 already deposited
-- Returns `0` if `account != player1` and player2 slot is already taken
-- Returns `stakeAmount` in all other valid cases
-
----
+- `0` if state is not `OPEN`
+- `0` if `account == player1` and player1 already deposited
+- `0` if `account != player1` and player2 slot is taken
+- `stakeAmount` otherwise
 
 #### `maxMint(address account) → uint256`
 
 Identical to `maxDeposit` (1:1 share/asset ratio).
 
----
-
 #### `maxWithdraw(address) → uint256`
 
-Always returns `0`. Withdrawals are disabled; use `submitNumber` to resolve.
-
----
+Always `0`. Use `submitNumber` to resolve.
 
 #### `maxRedeem(address) → uint256`
 
-Always returns `0`.
-
----
-
-#### `state() → State`
-
-Current challenge state: `OPEN` (0), `ACTIVE` (1), `RESOLVED` (2).
-
----
-
-#### `submittedNumber(address player) → uint256`
-
-The number submitted by `player`. Only meaningful after `hasSubmitted[player] == true`.
-
----
-
-#### `hasSubmitted(address player) → bool`
-
-Whether `player` has called `submitNumber`.
+Always `0`.
 
 ---
 
@@ -386,20 +440,18 @@ Whether `player` has called `submitNumber`.
 
 Join the challenge by depositing exactly `stakeAmount` tokens.
 
-**Player1 path (receiver == player1):**
+**Player1 path (`receiver == player1`):**
 1. Reverts `WrongState` if not OPEN.
 2. Reverts `WrongStakeAmount` if `assets != stakeAmount`.
 3. Reverts `AlreadyJoined` if player1 already deposited.
-4. Transfers tokens from caller to vault, mints shares.
-5. Emits `PlayerJoined`.
+4. Transfers tokens, mints shares, emits `PlayerJoined`.
 
-**Player2 path (receiver != player1):**
+**Player2 path (`receiver != player1`):**
 1. Same state and amount checks.
 2. Reverts `NoActiveIdentity` if `identityNFT.isValid(receiver)` is false.
 3. Reverts `AlreadyJoined` if player2 slot is already taken.
 4. Sets `player2 = receiver`.
-5. Once both players have deposited: sets `state = ACTIVE`, `endTime = block.timestamp + challengeDuration`.
-6. Emits `PlayerJoined`, then `ChallengeActivated`.
+5. Once both players deposited: sets `state = ACTIVE`, `endTime = now + challengeDuration`, emits `ChallengeActivated`.
 
 **Requires:** caller has approved at least `stakeAmount` to this vault.
 **Guard:** `nonReentrant`, `whenNotPaused`
@@ -410,31 +462,29 @@ Join the challenge by depositing exactly `stakeAmount` tokens.
 
 Submit your number after the challenge window ends. Callable once per player.
 
-**Flow:**
 1. Reverts `WrongState` if not ACTIVE.
 2. Reverts `NotAfterEndTime` if `block.timestamp < endTime`.
 3. Reverts `NotPlayer` if caller is not player1 or player2.
 4. Reverts `AlreadySubmitted` if caller already submitted.
-5. Records `submittedNumber[caller] = number`, `hasSubmitted[caller] = true`.
-6. Emits `NumberSubmitted`.
-7. If both players have submitted:
-   - `n1 > n2` → player1 wins → `_resolveChallenge(player1)`
-   - `n2 > n1` → player2 wins → `_resolveChallenge(player2)`
+5. Records number and submission flag. Emits `NumberSubmitted`.
+6. If both submitted:
+   - `n1 > n2` → player1 wins
+   - `n2 > n1` → player2 wins
    - Tie → state stays ACTIVE, resolver must call `resolveDispute`
 
-**Resolution internal flow (`_resolveChallenge`):** Burns both players' shares, transfers the full prize (`stakeAmount * 2`) to the winner, sets `state = RESOLVED`, emits `ChallengeResolved`.
+**On win:** Burns both players' shares, transfers full prize (`stakeAmount × 2`) to winner. Emits `ChallengeResolved`.
 
 ---
 
 #### `resolveDispute(address _winner)`
 
-Resolver-only. Breaks a tie — callable only when both players have submitted the same number.
+Resolver-only. Breaks a tie — callable only when both players submitted the same number.
 
 1. Reverts `NotResolver` if caller is not `resolver`.
 2. Reverts `WrongState` if not ACTIVE.
 3. Reverts `BothMustSubmit` if either player has not submitted.
-4. Reverts with `"Not a tie"` if the numbers differ.
-5. Calls `_resolveChallenge(_winner)`.
+4. Reverts `"Not a tie"` if numbers differ.
+5. Resolves and transfers prize to `_winner`.
 
 ---
 
@@ -442,13 +492,11 @@ Resolver-only. Breaks a tie — callable only when both players have submitted t
 
 #### `setResolver(address _resolver)`
 
-Update the resolver address. Emits `ResolverUpdated`.
-
----
+Update the resolver. Emits `ResolverUpdated`.
 
 #### `pause() / unpause()`
 
-Emergency pause — blocks `deposit`. Emits `Paused` / `Unpaused`.
+Emergency pause — blocks `deposit`.
 
 ---
 
@@ -465,21 +513,21 @@ event ResolverUpdated(address indexed newResolver);
 ### Custom Errors
 
 ```solidity
-error NotPlayer();               // Caller is not player1 or player2
-error WrongState();              // Action not allowed in the current state
-error AlreadyJoined();           // Deposit slot already taken
-error WrongStakeAmount();        // assets != stakeAmount
-error SharesNonTransferable();   // Share transfer attempted
-error NotResolver();             // Only the resolver can call this
-error NoActiveIdentity();        // player2 does not have a valid IdentityNFT
-error NotAfterEndTime();         // Challenge window has not ended yet
-error AlreadySubmitted();        // Player already called submitNumber
-error BothMustSubmit();          // resolveDispute called before both submitted
+error NotPlayer();
+error WrongState();
+error AlreadyJoined();
+error WrongStakeAmount();
+error SharesNonTransferable();
+error NotResolver();
+error NoActiveIdentity();
+error NotAfterEndTime();
+error AlreadySubmitted();
+error BothMustSubmit();
 ```
 
 ---
 
-## 4. VaultFactory
+## 5. VaultFactory
 
 **File:** `src/challenges/VaultFactory.sol`
 **Inherits:** `Ownable`, `Pausable`
@@ -490,8 +538,8 @@ Deploys and tracks `ChallengeVault` contracts. Accepts a whitelist of ERC-20 tok
 
 ```solidity
 constructor(
-    address[] memory _initialTokens,  // Initial whitelist of ERC-20 token addresses
-    address          _resolver,       // Default resolver for all created vaults
+    address[] memory _initialTokens,  // Initial ERC-20 token whitelist
+    address          _resolver,       // Default resolver for all vaults
     address          _identityNFT     // IdentityNFT contract — callers must pass isValid()
 )
 ```
@@ -500,11 +548,11 @@ constructor(
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `identityNFT` | `IIdentityNFT immutable` | Identity contract — checked at `createChallenge` |
+| `identityNFT` | `IIdentityNFT immutable` | Checked at `createChallenge` |
 | `resolver` | `address` | Default resolver passed to new vaults |
 | `allVaults` | `address[]` | All vault addresses deployed by this factory |
 | `isVault` | `mapping(address => bool)` | True for factory-deployed vaults |
-| `vaultsByCreator` | `mapping(address => address[])` | Vaults created by a specific address |
+| `vaultsByCreator` | `mapping(address => address[])` | Vaults per creator |
 
 ---
 
@@ -512,37 +560,27 @@ constructor(
 
 #### `getAllVaults() → address[]`
 
-Returns all vault addresses deployed by this factory.
-
----
+All vault addresses deployed by this factory.
 
 #### `getVaultsByCreator(address creator) → address[]`
 
-Returns all vaults created by `creator`.
-
----
+Vaults deployed by a specific creator.
 
 #### `getVaultCount() → uint256`
 
-Returns the total number of vaults deployed.
-
----
+Total vaults deployed.
 
 #### `isAcceptedToken(address token) → bool`
 
-Returns `true` if `token` is in the active whitelist.
-
----
+True if `token` is in the active whitelist.
 
 #### `getAcceptedTokens() → address[]`
 
-Returns all currently whitelisted token addresses.
-
----
+All currently whitelisted token addresses.
 
 #### `isVault(address vault) → bool`
 
-Returns `true` if `vault` was deployed by this factory.
+True if `vault` was deployed by this factory.
 
 ---
 
@@ -550,20 +588,15 @@ Returns `true` if `vault` was deployed by this factory.
 
 #### `createChallenge(address token, uint256 stakeAmount, uint256 duration, string metadataURI) → address vault`
 
-Deploy a new ChallengeVault. Caller becomes player1.
+Deploy a new `ChallengeVault`. Caller becomes player1.
 
-**Flow:**
-1. Reverts `TokenNotAccepted` if `token` is not in the whitelist.
-2. Reverts `NoActiveIdentity` if caller does not have a valid IdentityNFT.
+1. Reverts `TokenNotAccepted` if `token` is not whitelisted.
+2. Reverts `NoActiveIdentity` if caller lacks a valid IdentityNFT.
 3. Reverts `ZeroStake` if `stakeAmount == 0`.
 4. Reverts `ZeroDuration` if `duration == 0`.
-5. Deploys a new `ChallengeVault(token, stakeAmount, duration, metadataURI, resolver, caller, identityNFT)`.
-6. Registers the vault in `allVaults`, `isVault`, `vaultsByCreator`.
-7. Emits `VaultCreated`.
-8. Returns the vault address.
+5. Deploys vault, registers it, emits `VaultCreated`, returns vault address.
 
-**After calling:** caller must separately approve `stakeAmount` of `token` to the vault address, then call `vault.deposit(stakeAmount, self)` to join as player1.
-
+**After calling:** approve `stakeAmount` of `token` to the vault, then call `vault.deposit(stakeAmount, self)` to join as player1.
 **Guard:** `whenNotPaused`
 
 ---
@@ -572,25 +605,19 @@ Deploy a new ChallengeVault. Caller becomes player1.
 
 #### `whitelistToken(address token)`
 
-Add a token to the accepted whitelist. Reverts `ZeroAddress`. Emits `TokenWhitelisted`.
-
----
+Add a token to the whitelist. Reverts `ZeroAddress`. Emits `TokenWhitelisted`.
 
 #### `removeToken(address token)`
 
-Remove a token from the accepted whitelist. Existing vaults using this token are unaffected. Emits `TokenRemovedFromWhitelist`.
-
----
+Remove a token from the whitelist. Existing vaults are unaffected. Emits `TokenRemovedFromWhitelist`.
 
 #### `setResolver(address _resolver)`
 
 Update the default resolver for future vaults. Reverts `ZeroAddress`. Emits `ResolverUpdated`.
 
----
-
 #### `pause() / unpause()`
 
-Emergency pause — blocks `createChallenge`. Emits `Paused` / `Unpaused`.
+Emergency pause — blocks `createChallenge`.
 
 ---
 
@@ -613,21 +640,21 @@ event TokenRemovedFromWhitelist(address indexed token);
 ### Custom Errors
 
 ```solidity
-error ZeroAddress();                    // Address parameter is zero
-error ZeroStake();                      // stakeAmount is zero
-error ZeroDuration();                   // duration is zero
-error NoActiveIdentity();               // Caller lacks a valid IdentityNFT
-error TokenNotAccepted(address token);  // Token not in the whitelist
+error ZeroAddress();
+error ZeroStake();
+error ZeroDuration();
+error NoActiveIdentity();
+error TokenNotAccepted(address token);
 ```
 
 ---
 
-## 5. CourseNFT
+## 6. CourseNFT
 
 **File:** `src/courses/CourseNFT.sol`
 **Inherits:** `ERC721`, `ERC2981`, `Ownable`, `Pausable`, `ReentrancyGuard`
 
-ERC-721 contract for a single course. Each token grants the holder access to private course content via a token-gated view function. Payments are in ETH. EIP-2981 royalties are configured for secondary sales.
+ERC-721 contract for a single course. Each token grants the holder access to private course content via a token-gated view. Payments are in ETH. EIP-2981 royalties are configured for secondary sales.
 
 ### Constructor
 
@@ -650,9 +677,9 @@ constructor(
 |----------|------|-------------|
 | `mintPrice` | `uint256` | ETH price per token (wei) |
 | `maxSupply` | `uint256` | Max tokens; 0 = unlimited |
-| `baseTokenURI` | `string` | Base URI for public metadata (used by `tokenURI`) |
-| `privateContentURI` | `string` | Private course content URI — only token holders can read |
-| `treasury` | `address` | Receives ETH payments on `withdraw` |
+| `baseTokenURI` | `string` | Base URI for public metadata |
+| `privateContentURI` | `string` | Private content URI — only token holders can read |
+| `treasury` | `address` | Receives ETH on `withdraw` |
 
 ---
 
@@ -660,35 +687,15 @@ constructor(
 
 #### `totalSupply() → uint256`
 
-Returns the number of tokens minted so far.
-
----
+Tokens minted so far.
 
 #### `canMint() → bool`
 
-Returns `true` if minting is currently possible:
-- Contract is not paused
-- `maxSupply == 0` (unlimited) or `totalSupply < maxSupply`
-
----
+True if not paused and supply is not exhausted.
 
 #### `getCourseContent(uint256 tokenId) → string`
 
-Returns `privateContentURI`. Reverts `NotTokenHolder` if `ownerOf(tokenId) != msg.sender`.
-
-This is the content gate: only NFT holders can read the private course material.
-
----
-
-#### `mintPrice() → uint256`
-
-Current ETH mint price in wei.
-
----
-
-#### `maxSupply() → uint256`
-
-Maximum token supply. `0` means unlimited.
+Returns `privateContentURI`. Reverts `NotTokenHolder` if caller does not own the token.
 
 ---
 
@@ -696,67 +703,26 @@ Maximum token supply. `0` means unlimited.
 
 #### `mint() → uint256 tokenId`
 
-Mint to `msg.sender`. Requires exactly `mintPrice` ETH attached.
-
-1. Reverts `IncorrectPayment` if `msg.value != mintPrice`.
-2. Reverts `MaxSupplyReached` if supply is exhausted.
-3. Mints token to caller, emits `Minted`.
-
+Mint to `msg.sender`. Requires exactly `mintPrice` ETH.
+Reverts `IncorrectPayment` or `MaxSupplyReached`. Emits `Minted`.
 **Guard:** `whenNotPaused`, `nonReentrant`
-
----
 
 #### `mintTo(address recipient) → uint256 tokenId`
 
-Mint to `recipient`. Caller pays. Same rules as `mint`.
-
-Emits `MintedTo(payer, recipient, tokenId)`.
-
+Mint to `recipient`. Caller pays. Same rules as `mint`. Emits `MintedTo`.
 **Guard:** `whenNotPaused`, `nonReentrant`
 
 ---
 
 ### Admin Functions (onlyOwner)
 
-#### `setMintPrice(uint256 newPrice)`
-
-Update the ETH mint price. Emits `MintPriceUpdated`.
-
----
-
-#### `setPrivateContentURI(string newURI)`
-
-Update the private content URI. Affects all existing token holders immediately. Emits `PrivateContentUpdated`.
-
----
-
-#### `setBaseURI(string newURI)`
-
-Update the public metadata base URI. Emits `BaseURIUpdated`.
-
----
-
-#### `setTreasury(address newTreasury)`
-
-Update the treasury address. Reverts `ZeroAddress`. Emits `TreasuryUpdated`.
-
----
-
-#### `setRoyalty(address receiver, uint96 feeBps)`
-
-Update the EIP-2981 default royalty (receiver and percentage).
-
----
-
-#### `withdraw()`
-
-Sweep the full ETH balance of the contract to `treasury`. Reverts `WithdrawalFailed` on transfer failure. Guard: `nonReentrant`.
-
----
-
-#### `pause() / unpause()`
-
-Emergency pause — blocks `mint` and `mintTo`. Emits `Paused` / `Unpaused`.
+#### `setMintPrice(uint256 newPrice)` — Emits `MintPriceUpdated`
+#### `setPrivateContentURI(string newURI)` — Emits `PrivateContentUpdated` (affects all existing holders immediately)
+#### `setBaseURI(string newURI)` — Emits `BaseURIUpdated`
+#### `setTreasury(address newTreasury)` — Reverts `ZeroAddress`. Emits `TreasuryUpdated`
+#### `setRoyalty(address receiver, uint96 feeBps)` — Updates EIP-2981 default royalty
+#### `withdraw()` — Sweeps ETH balance to treasury. Guard: `nonReentrant`
+#### `pause() / unpause()` — Blocks `mint` and `mintTo`
 
 ---
 
@@ -774,21 +740,21 @@ event TreasuryUpdated(address indexed newTreasury);
 ### Custom Errors
 
 ```solidity
-error IncorrectPayment();    // msg.value != mintPrice
-error MaxSupplyReached();    // totalSupply >= maxSupply
-error NotTokenHolder();      // Caller does not own the token
-error WithdrawalFailed();    // ETH transfer to treasury failed
-error ZeroAddress();         // treasury set to address(0)
+error IncorrectPayment();
+error MaxSupplyReached();
+error NotTokenHolder();
+error WithdrawalFailed();
+error ZeroAddress();
 ```
 
 ---
 
-## 6. CourseFactory
+## 7. CourseFactory
 
 **File:** `src/courses/CourseFactory.sol`
 **Inherits:** `Ownable`
 
-Factory that deploys `CourseNFT` contracts and tracks them. Ownership of each deployed course is transferred to the caller immediately after deployment.
+Deploys `CourseNFT` contracts and tracks them. Ownership of each deployed course is transferred to the caller immediately after deployment.
 
 ### Constructor
 
@@ -796,14 +762,12 @@ Factory that deploys `CourseNFT` contracts and tracks them. Ownership of each de
 constructor(address _defaultTreasury)
 ```
 
-Reverts `ZeroAddress` if `_defaultTreasury == address(0)`.
-
 ### State Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `defaultTreasury` | `address` | Fallback treasury when course creator passes `address(0)` |
-| `isDeployedCourse` | `mapping(address => bool)` | True for factory-deployed CourseNFT contracts |
+| `defaultTreasury` | `address` | Fallback treasury when creator passes `address(0)` |
+| `isDeployedCourse` | `mapping(address => bool)` | True for factory-deployed CourseNFTs |
 
 ---
 
@@ -811,31 +775,23 @@ Reverts `ZeroAddress` if `_defaultTreasury == address(0)`.
 
 #### `getAllCourses() → address[]`
 
-Returns all deployed course addresses.
-
----
+All deployed course addresses.
 
 #### `getCoursesByCreator(address creator) → address[]`
 
-Returns all course addresses deployed by `creator`.
-
----
+Courses deployed by a specific creator.
 
 #### `getCourseCount() → uint256`
 
-Returns the total number of courses deployed.
-
----
+Total courses deployed.
 
 #### `getCourseAtIndex(uint256 index) → address`
 
-Returns the course address at `index`. Reverts `IndexOutOfBounds` if out of range.
-
----
+Course at index. Reverts `IndexOutOfBounds` if out of range.
 
 #### `isDeployedCourse(address course) → bool`
 
-Returns `true` if `course` was deployed by this factory.
+True if deployed by this factory.
 
 ---
 
@@ -845,12 +801,10 @@ Returns `true` if `course` was deployed by this factory.
 
 Deploy a new `CourseNFT` and transfer ownership to `msg.sender`.
 
-**Parameters:**
-
 | Parameter | Description |
 |-----------|-------------|
-| `name` | ERC-721 name (e.g. `"Python 101"`) |
-| `symbol` | ERC-721 symbol (e.g. `"PY101"`) |
+| `name` | ERC-721 name |
+| `symbol` | ERC-721 symbol |
 | `mintPrice` | ETH price per token in wei |
 | `maxSupply` | Max token supply; `0` = unlimited |
 | `baseURI` | Public IPFS metadata base URI |
@@ -858,13 +812,7 @@ Deploy a new `CourseNFT` and transfer ownership to `msg.sender`.
 | `treasury` | ETH recipient; `address(0)` uses `defaultTreasury` |
 | `royaltyFeeBps` | EIP-2981 royalty in basis points (e.g. `500` = 5%) |
 
-**Flow:**
-1. Uses `defaultTreasury` if `treasury == address(0)`.
-2. Deploys `CourseNFT` with the provided parameters.
-3. Transfers ownership to `msg.sender`.
-4. Registers the address in `courses`, `coursesByCreator`, `isDeployedCourse`.
-5. Emits `CourseCreated`.
-6. Returns the course address.
+Emits `CourseCreated`.
 
 ---
 
@@ -899,16 +847,14 @@ error IndexOutOfBounds(uint256 index, uint256 length);
 
 ---
 
-## 7. Deploy Commands
+## 8. Deploy Commands
 
 ### Prerequisites
 
 ```bash
 cp .env.example .env
 # Fill: PRIVATE_KEY, BASE_SEPOLIA_RPC_URL, BASESCAN_API_KEY,
-#       DEFAULT_TREASURY, RESOLVER_ADDRESS,
-#       IDENTITY_NAME, IDENTITY_SYMBOL, IDENTITY_CITY,
-#       TOKEN_1 + prices, ACCEPTED_TOKEN_1
+#       DEFAULT_TREASURY, RESOLVER_ADDRESS, ACCEPTED_TOKEN_1
 source .env
 ```
 
@@ -921,49 +867,47 @@ forge coverage
 forge test --gas-report
 ```
 
-### Deploy to Base Sepolia
-
-Deploy IdentityNFT first — VaultFactory needs its address.
+### Deploy to Base Sepolia (recommended — using deploy.sh)
 
 ```bash
-# Step 1: IdentityNFT
-forge script script/DeployIdentityNFT.s.sol:DeployIdentityNFT \
-  --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY \
-  --broadcast --verify --verifier blockscout \
-  --verifier-url https://base-sepolia.blockscout.com/api/
-
-# Set IDENTITY_NFT=<address> in .env, then:
+# Step 1: IdentityNFTFactory (once)
+./script/deploy.sh base-sepolia --step identity-factory
+# → set IDENTITY_NFT_FACTORY=<address> in .env
+# → call deployCollection() from admin frontend to create first city
+# → set IDENTITY_NFT=<collection address> in .env
 
 # Step 2: VaultFactory
-forge script script/DeployVaultFactory.s.sol:DeployVaultFactory \
-  --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY \
-  --broadcast --verify --verifier blockscout \
-  --verifier-url https://base-sepolia.blockscout.com/api/
+./script/deploy.sh base-sepolia --step vault-factory
+# → set VAULT_FACTORY_ADDRESS=<address> in .env
 
 # Step 3: CourseFactory
-forge script script/DeployFactory.s.sol:DeployFactory \
-  --rpc-url $BASE_SEPOLIA_RPC_URL --private-key $PRIVATE_KEY \
-  --broadcast --verify --verifier blockscout \
-  --verifier-url https://base-sepolia.blockscout.com/api/
+./script/deploy.sh base-sepolia --step course-factory
+# → set FACTORY_ADDRESS=<address> in .env
+```
 
-# Extract all addresses after deployment
-node script/extract-addresses.js 84532
+Each step runs `node script/extract-addresses.js <chainId>` automatically.
+
+### Deploy a new city collection (after IdentityNFTFactory is live)
+
+Via `cast` (or from the admin frontend panel):
+
+```bash
+cast send $IDENTITY_NFT_FACTORY \
+  "deployCollection(string,string,string,address,bool,(address,uint256,uint256,uint256)[])" \
+  "Entry - Medellín" "EMDE" "Medellín" $DEFAULT_TREASURY false \
+  "[(0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f,50000000000000000000,20000000000000000000,200000000000000000000)]" \
+  --private-key $PRIVATE_KEY --rpc-url $BASE_SEPOLIA_RPC_URL
 ```
 
 ### Useful cast commands
 
 ```bash
-# Mint an identity card (after token approval)
-cast send $IDENTITY_NFT "mint(string,uint8,address)" \
-  "ipfs://QmMetadata" 0 $TOKEN_1 \
-  --private-key $PRIVATE_KEY --rpc-url $BASE_SEPOLIA_RPC_URL
-
 # Check identity validity
 cast call $IDENTITY_NFT "isValid(address)" $USER_ADDRESS \
   --rpc-url $BASE_SEPOLIA_RPC_URL
 
-# Create a challenge vault (requires identity + token approval for staking later)
-cast send $VAULT_FACTORY \
+# Create a challenge vault (after identity approval + staking token approval)
+cast send $VAULT_FACTORY_ADDRESS \
   "createChallenge(address,uint256,uint256,string)" \
   $ACCEPTED_TOKEN_1 $STAKE_AMOUNT 86400 "ipfs://QmChallenge" \
   --private-key $PRIVATE_KEY --rpc-url $BASE_SEPOLIA_RPC_URL
