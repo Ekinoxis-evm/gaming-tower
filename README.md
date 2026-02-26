@@ -1,6 +1,6 @@
-# Tokenized Gaming Tower
+# 1UP Gaming Tower — Smart Contracts
 
-> A decentralized gaming and education platform on Base.
+> A decentralized gaming and education platform on Base, built by [Ekinoxis](https://ekinoxis.xyz) with support and guidance from [ETH Cali](https://ethcali.org).
 > Players stake tokens to compete in number-submission challenges and maintain renewable identity profiles. Course creators monetize content through ETH-priced ERC-721 NFTs.
 
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.27-363636?logo=solidity)](https://soliditylang.org/)
@@ -23,7 +23,7 @@ Courses Platform
 
 ### Key rules
 
-- Gaming actions (challenge staking, identity mint/renewal) are paid in **whitelisted ERC-20 tokens** (1UP, USDC, EUROC — configured per deployment).
+- Gaming actions (challenge staking, identity mint/renewal) are paid in **whitelisted ERC-20 tokens** (1UP, USDC, EURC — configured per deployment).
 - ETH is used only by **CourseNFT**.
 - A valid (active, non-suspended) **IdentityNFT** is the only requirement to create or join a challenge.
 - Each **IdentityNFT** collection is city-specific (e.g. "Medellín", "Bogotá") and is deployed on-chain via `IdentityNFTFactory.deployCollection()`.
@@ -49,9 +49,9 @@ Courses Platform
 | Token | Network | Address |
 |-------|---------|---------|
 | 1UP | Base Sepolia | `0x05cb1e3ba6102b097c0ad913c8b82ac76e7df73f` |
-| 1UP | Base Mainnet | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| 1UP | Base Mainnet | `0xF6813C71e620c654Ff6049a485E38D9494eFABdf` |
 | USDC | Base Mainnet | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| EUROC | Base Mainnet | `0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42` |
+| EURC | Base Mainnet | `0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42` |
 
 ---
 
@@ -421,5 +421,9 @@ docs_contracts/
 - [Base](https://base.org/) — L2 on Ethereum
 
 ---
+
+---
+
+**Built by [Ekinoxis](https://ekinoxis.xyz)** — with support and guidance from [ETH Cali](https://ethcali.org)
 
 **License:** MIT

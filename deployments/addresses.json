@@ -6,7 +6,7 @@
     "timestamp": "2026-02-21T02:46:37.158Z",
     "contracts": {
       "IdentityNFTFactory": "0xa5806b4f9faac539803bc03e09294ccf4688c663",
-      "VaultFactory": "0xEed44d7274DcaB740b784a2b1a6a41AD99073638",
+      "VaultFactory": "0x4B24116Df4C31c40aB5B3cb3bA3Ffe743A346978",
       "CourseFactory": "0xd7df1f996adf0d119f9a286036c05a40d783599f"
     }
   },
